@@ -88,7 +88,14 @@ Imagem via pipe (stdin com `-`, convenção Unix):
 
 ```bash
 cat screenshot.png | uvx vision-tool --check - "o botão Salvar está visível"
+
+# clipboard (Wayland) direto para o modelo
+wl-paste | uvx vision-tool - "como está a paleta de cores"
 ```
+
+O stdin aceita qualquer formato do Pillow (PNG, JPEG, WebP, GIF, BMP...),
+é convertido para PNG e imagens com mais de ~15 MP são reduzidas
+automaticamente antes de ir para o modelo.
 
 Pergunta aberta:
 
@@ -139,7 +146,7 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 
 | Opção | Descrição |
 |---|---|
-| `image` | Imagem PNG/JPG ou lista separada por vírgula; `-` = ler do stdin (posicional) |
+| `image` | Imagem ou lista separada por vírgula; `-` = ler do stdin (qualquer formato do Pillow) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
 | `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |

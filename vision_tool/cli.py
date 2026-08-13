@@ -16,12 +16,15 @@ Sobrescrever o modelo:
 from __future__ import annotations
 
 import argparse
+import io
 import os
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
+
+from PIL import Image, UnidentifiedImageError
 
 # Modelo padrão combinado: Gemma 3 4B com visão, baixado automaticamente.
 DEFAULT_HF_REPO = "ggml-org/gemma-3-4b-it-GGUF"
@@ -193,29 +196,48 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-# Assinaturas mágicas para escolher a extensão do arquivo temporário do stdin.
-_IMAGE_MAGIC = (
-    (b"\x89PNG\r\n\x1a\n", ".png"),
-    (b"\xff\xd8\xff", ".jpg"),
-    (b"GIF8", ".gif"),
-)
+# Limites do decodificador do llama.cpp (stb_image): ~16,7 MP. Normalizamos
+# tudo para PNG e reduzimos imagens acima disso antes de enviar ao modelo.
+_MAX_PIXELS = 15_000_000
+
+
+def _normalize_image(data: bytes) -> str:
+    """Decodifica bytes de imagem (qualquer formato do Pillow), converte para
+    PNG, reduz se for grande demais e devolve o caminho do arquivo temporário."""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError(
+            "o conteúdo não é uma imagem decodificável — o clipboard pode ter "
+            "entregado texto ou um formato sem suporte"
+        ) from exc
+
+    if img.mode not in ("RGB", "RGBA", "L"):
+        img = img.convert("RGB")
+
+    width, height = img.size
+    pixels = width * height
+    if pixels > _MAX_PIXELS:
+        factor = (_MAX_PIXELS / pixels) ** 0.5
+        img = img.resize((max(1, int(width * factor)), max(1, int(height * factor))),
+                         Image.LANCZOS)
+
+    fd, path = tempfile.mkstemp(suffix=".png", prefix="vision-stdin-")
+    with os.fdopen(fd, "wb") as f:
+        img.save(f, "PNG")
+    return path
 
 
 def _read_stdin_image() -> str:
-    """Lê a imagem do stdin e grava em arquivo temporário (devole o caminho)."""
+    """Lê a imagem do stdin e normaliza (devolve o caminho do temp)."""
     data = sys.stdin.buffer.read()
     if not data:
-        raise ValueError("stdin vazio: envie a imagem via pipe "
-                         "(ex.: cat tela.png | vision-tool - \"...\")")
-    suffix = ".png"
-    for magic, ext in _IMAGE_MAGIC:
-        if data.startswith(magic):
-            suffix = ext
-            break
-    fd, path = tempfile.mkstemp(suffix=suffix, prefix="vision-stdin-")
-    with os.fdopen(fd, "wb") as f:
-        f.write(data)
-    return path
+        raise ValueError(
+            "stdin vazio: envie a imagem via pipe "
+            '(ex.: cat tela.png | vision-tool - "...")'
+        )
+    return _normalize_image(data)
 
 
 def _die_with_parent():
