@@ -95,7 +95,9 @@ wl-paste | uvx vision-tool - "como está a paleta de cores"
 
 O stdin aceita qualquer formato do Pillow (PNG, JPEG, WebP, GIF, BMP...),
 é convertido para PNG e imagens com mais de ~15 MP são reduzidas
-automaticamente antes de ir para o modelo.
+automaticamente antes de ir para o modelo. O mesmo vale para arquivos
+passados diretamente (caminho ou lista) — imagens acima do limite do
+decodificador do llama.cpp são reduzidas pelo próprio tool.
 
 Pergunta aberta:
 

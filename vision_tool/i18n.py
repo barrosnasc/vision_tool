@@ -34,7 +34,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "lista de objetos, cada um com \"label\" (o que é o elemento) e "
             "\"bbox\" (lista [x1, y1, x2, y2] com coordenadas normalizadas "
             "de 0 a 1000 — x1,y1 canto superior esquerdo, x2,y2 canto "
-            "inferior direito). Inclua apenas os elementos pedidos. {prompt}"
+            "inferior direito). Regras: o bbox deve ser o MENOR retângulo "
+            "que contém apenas o elemento pedido; nunca use [0,0,1000,1000] "
+            "nem caixas que cubram a imagem inteira; se o elemento não "
+            "existir, responda com a lista vazia []. Inclua apenas os "
+            "elementos pedidos. {prompt}"
         ),
         "stdin_empty": (
             "stdin vazio: envie a imagem via pipe "
@@ -105,7 +109,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "objects, each with \"label\" (what the element is) and \"bbox\" "
             "(a [x1, y1, x2, y2] list with coordinates normalized from 0 to "
             "1000 — x1,y1 top-left corner, x2,y2 bottom-right corner). "
-            "Include only the requested elements. {prompt}"
+            "Rules: the bbox must be the SMALLEST rectangle containing only "
+            "the requested element; never use [0,0,1000,1000] or boxes "
+            "covering the whole image; if the element does not exist, "
+            "answer with the empty list []. Include only the requested "
+            "elements. {prompt}"
         ),
         "stdin_empty": (
             "empty stdin: pipe the image "

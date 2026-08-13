@@ -445,6 +445,37 @@ def _strip_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
+def _filter_bboxes(text: str) -> str:
+    """Remove bboxes que cobrem a imagem (quase) inteira — falha clássica
+    de localização dos modelos pequenos."""
+    import json as _json
+    try:
+        items = _json.loads(text)
+    except _json.JSONDecodeError:
+        return text
+    if not isinstance(items, list):
+        return text
+    kept, dropped = [], 0
+    for item in items:
+        bbox = item.get("bbox") if isinstance(item, dict) else None
+        if (
+            isinstance(bbox, list) and len(bbox) == 4
+            and all(isinstance(v, (int, float)) for v in bbox)
+        ):
+            x1, y1, x2, y2 = (float(v) for v in bbox)
+            area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+            if area >= 0.8 * 1000 * 1000:
+                dropped += 1
+                continue
+        kept.append(item)
+    if dropped:
+        print(
+            f"aviso: {dropped} bbox(es) cobrindo a imagem inteira removido(s)",
+            file=sys.stderr,
+        )
+    return _json.dumps(kept, ensure_ascii=False)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -484,13 +515,24 @@ def main(argv: list[str] | None = None) -> int:
     check_mode = args.check or args.check_code or args.check_json
     check_json = args.check_json
 
-    tmp_image = None
+    tmp_files: list[str] = []
     image = args.image
-    if image == "-":
-        try:
-            image = tmp_image = _read_stdin_image(t)
-        except ValueError as exc:
-            parser.error(str(exc))
+    try:
+        if image == "-":
+            image = _read_stdin_image(t)
+            tmp_files.append(image)
+        elif image:
+            # Normaliza cada imagem de arquivo também: se for grande demais
+            # para o decodificador do llama, o próprio tool reduz o tamanho.
+            parts: list[str] = []
+            for path in (p.strip() for p in image.split(",") if p.strip()):
+                with open(path, "rb") as f:
+                    data = f.read()
+                parts.append(_normalize_image(data, t))
+                tmp_files.append(parts[-1])
+            image = ",".join(parts)
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
 
     prompt = args.prompt
     if prompt and check_json:
@@ -575,6 +617,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             if proc.stdout:
                 out = _strip_fences(proc.stdout)
+                if args.type == "bbox":
+                    out = _filter_bboxes(out)
                 print(out)
             if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")
@@ -595,9 +639,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 124
     finally:
-        if tmp_image:
+        for path in tmp_files:
             try:
-                os.remove(tmp_image)
+                os.remove(path)
             except OSError:
                 pass
 
