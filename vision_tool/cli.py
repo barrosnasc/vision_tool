@@ -16,8 +16,10 @@ Sobrescrever o modelo:
 from __future__ import annotations
 
 import argparse
+import base64
 import io
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -261,14 +263,32 @@ def _normalize_image(data: bytes) -> str:
     return path
 
 
+# Browsers colocam a imagem copiada no clipboard como HTML com <img
+# src="data:image/...;base64,...">. Extraímos isso automaticamente.
+_DATA_IMAGE_RE = re.compile(rb"data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)")
+
+
 def _read_stdin_image() -> str:
-    """Lê a imagem do stdin e normaliza (devolve o caminho do temp)."""
+    """Lê a imagem do stdin e normaliza (devolve o caminho do temp).
+
+    Se o clipboard entregar HTML (wl-paste sem --type), procura a imagem
+    embutida como data:image e a usa."""
     data = sys.stdin.buffer.read()
     if not data:
         raise ValueError(
             "stdin vazio: envie a imagem via pipe "
             '(ex.: cat tela.png | vision-tool - "...")'
         )
+    head = data[:512].lstrip()
+    if head.startswith((b"<html", b"<!DOCTYPE", b"<meta", b"<img", b"<?xml")):
+        match = _DATA_IMAGE_RE.search(data)
+        if match:
+            data = base64.b64decode(match.group(2))
+        else:
+            raise ValueError(
+                "o clipboard entregou HTML sem imagem embutida. Dica: use "
+                "'wl-paste --type image/png' ou copie a imagem novamente."
+            )
     return _normalize_image(data)
 
 
