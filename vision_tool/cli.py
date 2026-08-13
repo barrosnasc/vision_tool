@@ -100,6 +100,16 @@ string ::=
 number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
 
 ws ::= | " " | "\n" [ \t]{0,20}'''
+# Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} com coordenadas
+# normalizadas 0-1000).
+GRAMMAR_BBOX = r'''root   ::= array
+array  ::= "[" ws (item (ws "," ws item)*)? ws "]"
+item   ::= "{" ws "\"label\"" ws ":" ws string ws "," ws "\"bbox\"" ws ":" ws coords ws "}"
+coords ::= "[" ws coord ws "," ws coord ws "," ws coord ws "," ws coord ws "]"
+string ::= "\"" char* "\""
+char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+coord  ::= [0-9] | [1-9] [0-9] | [1-9] [0-9] [0-9] | "1000"
+ws     ::= [ \t\n]*'''
 # Espelha grammars/list.gbnf byte a byte (lista JSON de strings).
 GRAMMAR_JSON_ARRAY = r'''root   ::= array
 array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
@@ -187,10 +197,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     modos.add_argument(
         "--type",
-        choices=["json", "list"],
-        metavar="{json,list}",
+        choices=["json", "list", "bbox"],
+        metavar="{json,list,bbox}",
         help="Formato da resposta em pergunta aberta: json = JSON completo, "
-             "list = lista JSON de strings",
+             "list = lista JSON de strings, bbox = lista de {label, bbox} "
+             "com coordenadas 0-1000",
     )
     parser.add_argument(
         "--validate",
@@ -445,6 +456,8 @@ def main(argv: list[str] | None = None) -> int:
         prompt = t["list"].format(prompt=prompt)
     elif prompt and args.type == "json":
         prompt = t["type_json"].format(prompt=prompt)
+    elif prompt and args.type == "bbox":
+        prompt = t["bbox"].format(prompt=prompt)
 
     if image:
         cmd += ["--image", image]
@@ -457,6 +470,8 @@ def main(argv: list[str] | None = None) -> int:
         cmd += ["--grammar", GRAMMAR_JSON_ARRAY]
     elif not grammar_file and args.type == "json":
         cmd += ["--grammar", GRAMMAR_JSON_FULL]
+    elif not grammar_file and args.type == "bbox":
+        cmd += ["--grammar", GRAMMAR_BBOX]
     elif not grammar_file and check_mode:
         cmd += ["--grammar", f'root ::= "{t["sim"]}" | "{t["nao"]}"']
     elif grammar_file:

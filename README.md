@@ -155,6 +155,10 @@ uvx vision-tool --type list ui.png "liste os itens do menu de navegação visív
 # JSON completo (objeto/estrutura livre, com pedido de concisão no template)
 uvx vision-tool --type json ui.png "resuma a página em JSON com título e seções"
 # → {"titulo": "...", "secoes": [...]}
+
+# bounding boxes de elementos (coordenadas normalizadas 0-1000)
+uvx vision-tool --type bbox ui.png "localize o botão Salvar e o título"
+# → [{"label": "título", "bbox": [58, 54, 141, 87]}, ...]
 ```
 
 ## Opções
@@ -166,7 +170,7 @@ uvx vision-tool --type json ui.png "resuma a página em JSON com título e seç�
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
 | `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |
 | `--check-json` | Com `--check`: veredito em JSON `{ok, divergencias}` (modelos maiores) |
-| `--type {json,list}` | Formato em pergunta aberta: JSON completo ou lista de strings |
+| `--type {json,list,bbox}` | Formato em pergunta aberta: JSON completo, lista de strings ou bounding boxes |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |

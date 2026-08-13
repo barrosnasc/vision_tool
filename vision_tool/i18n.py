@@ -29,6 +29,13 @@ STRINGS: dict[str, dict[str, str]] = {
             "profundidade. Não repita valores nem gere conteúdo além do "
             "necessário. {prompt}"
         ),
+        "bbox": (
+            "Analise a imagem com atenção. Responda apenas com JSON: uma "
+            "lista de objetos, cada um com \"label\" (o que é o elemento) e "
+            "\"bbox\" (lista [x1, y1, x2, y2] com coordenadas normalizadas "
+            "de 0 a 1000 — x1,y1 canto superior esquerdo, x2,y2 canto "
+            "inferior direito). Inclua apenas os elementos pedidos. {prompt}"
+        ),
         "stdin_empty": (
             "stdin vazio: envie a imagem via pipe "
             '(ex.: cat tela.png | vision-tool - "...")'
@@ -92,6 +99,13 @@ STRINGS: dict[str, dict[str, str]] = {
             "Look at the image carefully. Answer only with valid and CONCISE "
             "JSON: at most 5 fields per object and 3 levels of depth. Do not "
             "repeat values or generate more content than needed. {prompt}"
+        ),
+        "bbox": (
+            "Look at the image carefully. Answer only with JSON: a list of "
+            "objects, each with \"label\" (what the element is) and \"bbox\" "
+            "(a [x1, y1, x2, y2] list with coordinates normalized from 0 to "
+            "1000 — x1,y1 top-left corner, x2,y2 bottom-right corner). "
+            "Include only the requested elements. {prompt}"
         ),
         "stdin_empty": (
             "empty stdin: pipe the image "
