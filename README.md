@@ -142,14 +142,19 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
    confiável em modelos maiores (ex.: Qwen2.5-VL 7B)
 4. `-v` mostra o texto gerado e os logs do llama.cpp (útil para depurar)
 
-## Modo lista (`--json`)
+## Modo formatado (`--type json|list`)
 
-Perguntas abertas com resposta **estruturada**: lista JSON de strings, com
-gramática própria — útil para extrair itens da tela:
+Perguntas abertas com resposta **estruturada**, com gramática própria —
+`--type` referencia a gramática a usar:
 
 ```bash
-uvx vision-tool --json ui.png "liste os itens do menu de navegação visíveis"
+# lista JSON de strings (extração de itens da tela)
+uvx vision-tool --type list ui.png "liste os itens do menu de navegação visíveis"
 # → ["Home", "Illustrations", "Manga", "Novels"]
+
+# JSON completo (objeto/estrutura livre, com pedido de concisão no template)
+uvx vision-tool --type json ui.png "resuma a página em JSON com título e seções"
+# → {"titulo": "...", "secoes": [...]}
 ```
 
 ## Opções
@@ -161,7 +166,7 @@ uvx vision-tool --json ui.png "liste os itens do menu de navegação visíveis"
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
 | `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |
 | `--check-json` | Com `--check`: veredito em JSON `{ok, divergencias}` (modelos maiores) |
-| `--json` | Modo lista: lista JSON de strings (independente do check) |
+| `--type {json,list}` | Formato em pergunta aberta: JSON completo ou lista de strings |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |

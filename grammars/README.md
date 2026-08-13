@@ -17,7 +17,8 @@ consegue gerar mais nada.
 |---|---|---|
 | [`validate.gbnf`](validate.gbnf) | `Sim` \| `Não` | `--check` / `--check-code` (automático) |
 | [`validate-json.gbnf`](validate-json.gbnf) | objeto JSON `{"ok", "divergencias"}` | `--check --check-json` (automático) |
-| [`list.gbnf`](list.gbnf) | lista JSON de strings | `--json` (automático) |
+| [`list.gbnf`](list.gbnf) | lista JSON de strings | `--type list` (automático) |
+| [`json.gbnf`](json.gbnf) | JSON completo (objeto, array, string, número) | `--type json` (automático) |
 
 Os arquivos são a fonte canônica; o CLI embute cópias idênticas (strings raw
 em `vision_tool/cli.py`) para funcionar quando instalado via `uv tool install`.
@@ -40,12 +41,12 @@ llama-mtmd-cli \
 | Condição verdadeira | "Sim" ✅ | "Sim" ✅ (exato) |
 | Condição falsa (`main.rs` inexistente) | "Não" ✅ | "Não" ✅ (exato) |
 | Texto extra na resposta | frequente | **impossível** |
-| JSON válido (`--json`) | às vezes code fence | **sempre** (formatado) |
+| JSON válido (`--type`) | às vezes code fence | **sempre** (formatado) |
 | Campo `ok` do JSON em condição falsa | `ok: true` ❌ | `ok: true` ❌ (limite do modelo) |
 
 **Limite conhecido:** a gramática trava o *formato*, não o *raciocínio*. No
 JSON, o campo `ok` continua com viés de aprovação no modelo de 4B — para
-validação confiável use o modo texto (`--validate` sem `--json`); o JSON fica
+validação confiável use o modo texto (`--check` sem `--check-json`); o JSON fica
 confiável em modelos maiores (ex.: Qwen2.5-VL 7B).
 
 ## Referências

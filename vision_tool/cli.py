@@ -49,6 +49,31 @@ string ::= "\"" char* "\""
 char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
 boolean ::= "true" | "false"
 ws     ::= [ \t\n]*'''
+# Espelha grammars/json.gbnf (JSON completo: objeto, array, string, número...).
+GRAMMAR_JSON_FULL = r'''root   ::= object
+value  ::= object | array | string | number | ("true" | "false" | "null") ws
+
+object ::=
+  "{" ws (
+            string ":" ws value
+    ("," ws string ":" ws value)*
+  )? "}" ws
+
+array  ::=
+  "[" ws (
+            value
+    ("," ws value)*
+  )? "]" ws
+
+string ::=
+  "\"" (
+    [^"\\\x7F\x00-\x1F] |
+    "\\" (["\\bfnrt] | "u" [0-9a-fA-F]{4}) # escapes
+  )* "\"" ws
+
+number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
+
+ws ::= | " " | "\n" [ \t]{0,20}'''
 # Espelha grammars/list.gbnf byte a byte (lista JSON de strings).
 GRAMMAR_JSON_ARRAY = r'''root   ::= array
 array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
@@ -74,6 +99,11 @@ VALIDATE_JSON_TEMPLATE = (
 LIST_JSON_TEMPLATE = (
     "Analise a imagem com atenção. Responda apenas com JSON: uma lista de "
     "strings, uma por item pedido. {prompt}"
+)
+TYPE_JSON_TEMPLATE = (
+    "Analise a imagem com atenção. Responda apenas com JSON válido e "
+    "CONCISO: no máximo 5 campos por objeto e 3 níveis de profundidade. "
+    "Não repita valores nem gere conteúdo além do necessário. {prompt}"
 )
 
 # Caminhos comuns do binário além do PATH (último caso).
@@ -151,9 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
         help='Veredito em JSON: {"ok": ..., "divergencias": [...]}',
     )
     modos.add_argument(
-        "--json",
-        action="store_true",
-        help="Lista JSON de strings (extração de itens da tela)",
+        "--type",
+        choices=["json", "list"],
+        metavar="{json,list}",
+        help="Formato da resposta em pergunta aberta: json = JSON completo, "
+             "list = lista JSON de strings",
     )
     parser.add_argument(
         "--validate",
@@ -375,7 +407,7 @@ def main(argv: list[str] | None = None) -> int:
         "--check": args.check,
         "--check-code": args.check_code,
         "--check-json": args.check_json,
-        "--json": args.json,
+        "--type": args.type,
     }
     active = [name for name, on in modes.items() if on]
     if len(active) > 1:
@@ -397,8 +429,10 @@ def main(argv: list[str] | None = None) -> int:
         prompt = VALIDATE_JSON_TEMPLATE.format(prompt=prompt)
     elif prompt and check_mode:
         prompt = VALIDATE_TEMPLATE.format(prompt=prompt)
-    elif prompt and args.json:
+    elif prompt and args.type == "list":
         prompt = LIST_JSON_TEMPLATE.format(prompt=prompt)
+    elif prompt and args.type == "json":
+        prompt = TYPE_JSON_TEMPLATE.format(prompt=prompt)
 
     if image:
         cmd += ["--image", image]
@@ -407,8 +441,10 @@ def main(argv: list[str] | None = None) -> int:
     grammar_file = args.grammar
     if not grammar_file and check_json:
         cmd += ["--grammar", GRAMMAR_VALIDATE_JSON]
-    elif not grammar_file and args.json:
+    elif not grammar_file and args.type == "list":
         cmd += ["--grammar", GRAMMAR_JSON_ARRAY]
+    elif not grammar_file and args.type == "json":
+        cmd += ["--grammar", GRAMMAR_JSON_FULL]
     elif not grammar_file and check_mode:
         cmd += ["--grammar", GRAMMAR_VALIDATE]
     elif grammar_file:
@@ -460,7 +496,7 @@ def main(argv: list[str] | None = None) -> int:
             if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")
             return proc.returncode
-        if args.json or check_json:
+        if args.type or check_json:
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),

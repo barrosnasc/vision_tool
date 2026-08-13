@@ -49,12 +49,15 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
    # → {"ok": true, "divergencias": []}
    ```
 
-4. **Lista JSON** — `--json`: extrai itens da tela como lista de strings
+4. **Resposta formatada** — `--type json|list`: extrai dados da tela em JSON
    (gramática restringe o formato):
 
    ```
-   uvx vision-tool --json "tela.png" "liste os itens do menu de navegação"
+   uvx vision-tool --type list "tela.png" "liste os itens do menu de navegação"
    # → ["Home", "Illustrations", "Manga"]
+
+   uvx vision-tool --type json "tela.png" "resuma a página em JSON"
+   # → {"titulo": "...", "secoes": [...]}
    ```
 
 5. **Pergunta aberta** — sem flags de checagem. Resposta em texto livre
