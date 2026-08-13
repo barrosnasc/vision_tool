@@ -100,8 +100,8 @@ string ::=
 number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
 
 ws ::= | " " | "\n" [ \t]{0,20}'''
-# Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} com coordenadas
-# normalizadas 0-1000; label limitado a 40 chars pela gramática).
+# Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} em PIXELS;
+# label limitado a 40 chars; coords até 10000).
 GRAMMAR_BBOX = r'''root   ::= array
 array  ::= "[" ws (item (ws "," ws item)*)? ws "]"
 item   ::= "{" ws "\"label\"" ws ":" ws label ws "," ws "\"bbox\"" ws ":" ws coords ws "}"
@@ -467,10 +467,13 @@ def _strip_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _filter_bboxes(text: str) -> str:
+def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
     """Remove bboxes que cobrem a imagem (quase) inteira e labels que
-    ecoam o prompt — falhas clássicas dos modelos pequenos."""
+    ecoam o prompt — falhas clássicas dos modelos pequenos.
+    Coordenadas em pixels (contrato do --type bbox)."""
     import json as _json
+    width, height = dims if dims else (1000, 1000)
+    full_area = 0.8 * width * height
     try:
         items = _json.loads(text)
     except _json.JSONDecodeError:
@@ -479,6 +482,10 @@ def _filter_bboxes(text: str) -> str:
         return text
     kept, dropped = [], 0
     seen_boxes: set[tuple] = set()
+    # O modelo escala os dois eixos pela ALTURA (achado empírico com grade de
+    # calibração): em imagens não quadradas o x vem comprimido por
+    # altura/largura. Corrigimos multiplicando x por largura/altura.
+    x_scale = width / height if dims and height else 1.0
     for item in items:
         bbox = item.get("bbox") if isinstance(item, dict) else None
         label = item.get("label") if isinstance(item, dict) else None
@@ -487,8 +494,11 @@ def _filter_bboxes(text: str) -> str:
             and all(isinstance(v, (int, float)) for v in bbox)
         ):
             x1, y1, x2, y2 = (float(v) for v in bbox)
+            x1, x2 = x1 * x_scale, x2 * x_scale
+            if isinstance(item, dict):
+                item["bbox"] = [round(x1), round(y1), round(x2), round(y2)]
             area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
-            if area >= 0.8 * 1000 * 1000:
+            if area >= full_area:
                 dropped += 1
                 continue
             key = (round(x1), round(y1), round(x2), round(y2))
@@ -663,7 +673,7 @@ def main(argv: list[str] | None = None) -> int:
             if proc.stdout:
                 out = _strip_fences(proc.stdout)
                 if args.type == "bbox":
-                    out = _filter_bboxes(out)
+                    out = _filter_bboxes(out, image_dims)
                 print(out)
             if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")

@@ -158,9 +158,9 @@ uvx vision-tool --type list ui.png "liste os itens do menu de navegação visív
 uvx vision-tool --type json ui.png "resuma a página em JSON com título e seções"
 # → {"titulo": "...", "secoes": [...]}
 
-# bounding boxes de elementos (coordenadas normalizadas 0-1000)
+# bounding boxes de elementos (coordenadas EM PIXELS da imagem)
 uvx vision-tool --type bbox ui.png "localize o botão Salvar e o título"
-# → [{"label": "título", "bbox": [58, 54, 141, 87]}, ...]
+# → [{"label": "título", "bbox": [125, 59, 305, 95]}, ...]
 ```
 
 ## Opções

@@ -19,7 +19,7 @@ consegue gerar mais nada.
 | [`validate-json.gbnf`](validate-json.gbnf) | objeto JSON `{"ok", "divergencias"}` | `--check --check-json` (automático) |
 | [`list.gbnf`](list.gbnf) | lista JSON de strings | `--type list` (automático) |
 | [`json.gbnf`](json.gbnf) | JSON completo (objeto, array, string, número) | `--type json` (automático) |
-| [`bbox.gbnf`](bbox.gbnf) | lista de `{label, bbox}` com coordenadas 0-1000 | `--type bbox` (automático) |
+| [`bbox.gbnf`](bbox.gbnf) | lista de `{label, bbox}` em PIXELS (coords até 10000) | `--type bbox` (automático) |
 
 Os arquivos são a fonte canônica; o CLI embute cópias idênticas (strings raw
 em `vision_tool/cli.py`) para funcionar quando instalado via `uv tool install`.

@@ -60,7 +60,7 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
    # → {"titulo": "...", "secoes": [...]}
 
    uvx vision-tool --type bbox "tela.png" "localize o botão Salvar"
-   # → [{"label": "botão Salvar", "bbox": [x1, y1, x2, y2]}]  (0-1000)
+   # → [{"label": "botão Salvar", "bbox": [x1, y1, x2, y2]}]  (pixels)
    ```
 
 5. **Pergunta aberta** — sem flags de checagem. Resposta em texto livre
