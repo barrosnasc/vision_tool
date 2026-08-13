@@ -21,6 +21,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 
 # Modelo padrão combinado: Gemma 3 4B com visão, baixado automaticamente.
 DEFAULT_HF_REPO = "ggml-org/gemma-3-4b-it-GGUF"
@@ -101,7 +102,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "image",
         nargs="?",
-        help="Imagem PNG/JPG ou lista separada por vírgula; omita para chat interativo",
+        help="Imagem PNG/JPG ou lista separada por vírgula; '-' lê do stdin (pipe); "
+             "omitia para chat interativo",
     )
     parser.add_argument(
         "prompt",
@@ -191,6 +193,31 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+# Assinaturas mágicas para escolher a extensão do arquivo temporário do stdin.
+_IMAGE_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF8", ".gif"),
+)
+
+
+def _read_stdin_image() -> str:
+    """Lê a imagem do stdin e grava em arquivo temporário (devole o caminho)."""
+    data = sys.stdin.buffer.read()
+    if not data:
+        raise ValueError("stdin vazio: envie a imagem via pipe "
+                         "(ex.: cat tela.png | vision-tool - \"...\")")
+    suffix = ".png"
+    for magic, ext in _IMAGE_MAGIC:
+        if data.startswith(magic):
+            suffix = ext
+            break
+    fd, path = tempfile.mkstemp(suffix=suffix, prefix="vision-stdin-")
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+    return path
+
+
 def _die_with_parent():
     """Mata o filho (llama-mtmd-cli) se o Python morrer sem limpá-lo.
 
@@ -249,13 +276,21 @@ def main(argv: list[str] | None = None) -> int:
 
     check_mode = args.check or args.check_code
 
+    tmp_image = None
+    image = args.image
+    if image == "-":
+        try:
+            image = tmp_image = _read_stdin_image()
+        except ValueError as exc:
+            parser.error(str(exc))
+
     prompt = args.prompt
     if prompt and check_mode:
         template = VALIDATE_JSON_TEMPLATE if args.json else VALIDATE_TEMPLATE
         prompt = template.format(prompt=prompt)
 
-    if args.image:
-        cmd += ["--image", args.image]
+    if image:
+        cmd += ["--image", image]
 
     # Gramática: explícita (arquivo) > automática do --check/--json.
     grammar_file = args.grammar
@@ -338,6 +373,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 124
+    finally:
+        if tmp_image:
+            try:
+                os.remove(tmp_image)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

@@ -84,6 +84,12 @@ Comparação antes/depois:
 uvx vision-tool antes.png,depois.png "Liste o que mudou entre as duas interfaces"
 ```
 
+Imagem via pipe (stdin com `-`, convenção Unix):
+
+```bash
+cat screenshot.png | uvx vision-tool --check - "o botão Salvar está visível"
+```
+
 Pergunta aberta:
 
 ```bash
@@ -133,7 +139,7 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 
 | Opção | Descrição |
 |---|---|
-| `image` | Imagem PNG/JPG ou lista separada por vírgula (posicional) |
+| `image` | Imagem PNG/JPG ou lista separada por vírgula; `-` = ler do stdin (posicional) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
 | `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |

@@ -12,8 +12,8 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
 
 ## Parâmetros
 
-- `<imagem.png>` (obrigatório): caminho local da imagem. Para comparar duas
-  telas, use `"antes.png,depois.png"`.
+- `<imagem.png>` (obrigatório): caminho local da imagem; `-` lê a imagem do
+  stdin (pipe). Para comparar duas telas, use `"antes.png,depois.png"`.
 - `<condição>` (obrigatório): pergunta ou descrição sobre a imagem.
 
 ## Modos
@@ -72,6 +72,9 @@ uvx vision-tool --check-code "apos.png" "o menu tem os itens File, Edit, Selecti
 
 # conferir regressão antes/depois
 uvx vision-tool --check-code "antes.png,depois.png" "as duas telas mostram o mesmo layout"
+
+# imagem via pipe
+cat tela.png | uvx vision-tool --check-code - "o botão Salvar está visível"
 
 # extrair estado da tela para decidir o próximo passo
 uvx vision-tool "tela.png" "Há algum erro ou aviso visível? Liste-os"
