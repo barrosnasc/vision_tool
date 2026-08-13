@@ -116,7 +116,7 @@ Silencioso, com veredito no código de saída (`--check-code`):
 
 ```bash
 uvx vision-tool --check-code ui.png "o botão Salvar está visível"
-echo $?   # 0 = Sim, 3 = Não
+echo $?   # 0 = Sim, 1 = Não (como test/grep/diff)
 ```
 
 Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
@@ -136,7 +136,7 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 | `image` | Imagem PNG/JPG ou lista separada por vírgula (posicional) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
-| `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 3=Não) |
+| `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |
 | `--json` | Com `--check`: resposta JSON (modelos maiores) |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |

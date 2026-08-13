@@ -134,7 +134,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--check-code",
         action="store_true",
-        help="Checagem silenciosa: veredito só no exit code (0=Sim, 3=Não)",
+        help="Checagem silenciosa: veredito só no exit code (0=Sim, 1=Não)",
     )
     parser.add_argument(
         "--validate",
@@ -282,8 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.check_code and not args.json:
             # --check-code: veredito (Sim/Não, garantido pela gramática)
-            # vira código de saída — 0 = Sim, 3 = Não. Sem saída por padrão;
-            # -v imprime tudo e falhas inesperadas mostram o diagnóstico.
+            # vira código de saída — 0 = Sim, 1 = Não (convenção test/grep;
+            # >= 2 reservado para erros). Sem saída por padrão; -v imprime
+            # tudo e falhas inesperadas mostram o diagnóstico.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),
@@ -296,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
             if verdict == "sim":
                 return 0
             if verdict in ("não", "nao"):
-                return 3
+                return 1  # falso, como test/grep/diff (>=2 fica para erros)
             return proc.returncode
         if args.check and not args.json:
             # --check: imprime o veredito em texto; exit code normal do processo.

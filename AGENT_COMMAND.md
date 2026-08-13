@@ -19,7 +19,7 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
 ## Modos
 
 1. **Checagem silenciosa (recomendado)** — `--check-code`: sem saída de
-   texto; o veredito vai no código de saída (0 = Sim, 3 = Não). Use frases
+   texto; o veredito vai no código de saída (0 = Sim, 1 = Não). Use frases
    na forma POSITIVA:
 
    ```
@@ -28,7 +28,7 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
    ```
 
    Regras:
-   - Uma condição falsa ⇒ `Não` (exit 3)
+   - Uma condição falsa ⇒ `Não` (exit 1)
    - Evite negações ("não está", "oculto") — confundem o modelo
    - A resposta é restringida por gramática: o modelo só pode responder
      `Sim` ou `Não`; `-v` mostra o texto e os logs para depuração
