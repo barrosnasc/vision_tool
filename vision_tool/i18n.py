@@ -30,7 +30,9 @@ STRINGS: dict[str, dict[str, str]] = {
             "necessário. {prompt}"
         ),
         "bbox": (
-            "Analise a imagem com atenção. Responda apenas com JSON: uma "
+            "Analise a imagem com atenção. A imagem tem {dims} pixels "
+            "(largura x altura) — use essa proporção para estimar o tamanho "
+            "real dos elementos. Responda apenas com JSON: uma "
             "lista de objetos, cada um com \"label\" (o que é o elemento) e "
             "\"bbox\" (lista [x1, y1, x2, y2] com coordenadas normalizadas "
             "de 0 a 1000 — x1,y1 canto superior esquerdo, x2,y2 canto "
@@ -105,7 +107,9 @@ STRINGS: dict[str, dict[str, str]] = {
             "repeat values or generate more content than needed. {prompt}"
         ),
         "bbox": (
-            "Look at the image carefully. Answer only with JSON: a list of "
+            "Look at the image carefully. The image is {dims} pixels "
+            "(width x height) — use that ratio to estimate the actual size "
+            "of the elements. Answer only with JSON: a list of "
             "objects, each with \"label\" (what the element is) and \"bbox\" "
             "(a [x1, y1, x2, y2] list with coordinates normalized from 0 to "
             "1000 — x1,y1 top-left corner, x2,y2 bottom-right corner). "

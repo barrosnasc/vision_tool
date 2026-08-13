@@ -365,9 +365,9 @@ def _sniff_type(data: bytes, sniff: dict[str, str]) -> str:
     return sniff["unknown"]
 
 
-def _normalize_image(data: bytes, t: dict[str, str]) -> str:
+def _normalize_image(data: bytes, t: dict[str, str]) -> tuple[str, tuple[int, int]]:
     """Decodifica bytes de imagem (qualquer formato do Pillow), converte para
-    PNG, reduz se for grande demais e devolve o caminho do arquivo temporário."""
+    PNG, reduz se for grande demais e devolve (caminho do temp, dimensões)."""
     try:
         img = Image.open(io.BytesIO(data))
         img.load()
@@ -385,11 +385,12 @@ def _normalize_image(data: bytes, t: dict[str, str]) -> str:
         factor = (_MAX_PIXELS / pixels) ** 0.5
         img = img.resize((max(1, int(width * factor)), max(1, int(height * factor))),
                          Image.LANCZOS)
+        width, height = img.size
 
     fd, path = tempfile.mkstemp(suffix=".png", prefix="vision-stdin-")
     with os.fdopen(fd, "wb") as f:
         img.save(f, "PNG")
-    return path
+    return path, (width, height)
 
 
 # Browsers colocam a imagem copiada no clipboard como HTML com <img
@@ -397,8 +398,8 @@ def _normalize_image(data: bytes, t: dict[str, str]) -> str:
 _DATA_IMAGE_RE = re.compile(rb"data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)")
 
 
-def _read_stdin_image(t: dict[str, str]) -> str:
-    """Lê a imagem do stdin e normaliza (devolve o caminho do temp).
+def _read_stdin_image(t: dict[str, str]) -> tuple[str, tuple[int, int]]:
+    """Lê a imagem do stdin e normaliza (devolve caminho do temp e dimensões).
 
     Se o clipboard entregar HTML (wl-paste sem --type), procura a imagem
     embutida como data:image e a usa."""
@@ -516,10 +517,11 @@ def main(argv: list[str] | None = None) -> int:
     check_json = args.check_json
 
     tmp_files: list[str] = []
+    image_dims: tuple[int, int] | None = None
     image = args.image
     try:
         if image == "-":
-            image = _read_stdin_image(t)
+            image, image_dims = _read_stdin_image(t)
             tmp_files.append(image)
         elif image:
             # Normaliza cada imagem de arquivo também: se for grande demais
@@ -528,8 +530,11 @@ def main(argv: list[str] | None = None) -> int:
             for path in (p.strip() for p in image.split(",") if p.strip()):
                 with open(path, "rb") as f:
                     data = f.read()
-                parts.append(_normalize_image(data, t))
-                tmp_files.append(parts[-1])
+                part, dims = _normalize_image(data, t)
+                if image_dims is None:
+                    image_dims = dims
+                parts.append(part)
+                tmp_files.append(part)
             image = ",".join(parts)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
@@ -544,7 +549,8 @@ def main(argv: list[str] | None = None) -> int:
     elif prompt and args.type == "json":
         prompt = t["type_json"].format(prompt=prompt)
     elif prompt and args.type == "bbox":
-        prompt = t["bbox"].format(prompt=prompt)
+        dims = f"{image_dims[0]}x{image_dims[1]}" if image_dims else "?"
+        prompt = t["bbox"].format(prompt=prompt, dims=dims)
 
     if image:
         cmd += ["--image", image]
