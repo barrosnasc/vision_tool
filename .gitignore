@@ -11,6 +11,3 @@ uv.lock
 
 # Artefatos de teste
 *.png
-
-# Configuração local de modelo (não versionada)
-vision_tool/local_config.py

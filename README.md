@@ -193,14 +193,16 @@ A gramática do `--check` acompanha o idioma (`Sim`/`Não` ou `Yes`/`No`).
 ## Configuração local de modelo
 
 Para trocar o modelo padrão ou forçar CPU só na sua máquina, crie
-`~/.config/vision-tool/local_config.py` (fora do repositório e do pacote):
+`vision_tool/local_config.py` na pasta do projeto (arquivo local, **não
+commitar** — não existe no GitHub, mas é empacotado no comando instalado):
 
 ```python
 DEFAULT_HF_REPO = "mradermacher/LFM2.5-VL-3B-absolute-heresy-GGUF:Q8_0"
 DEFAULT_NGL = 0   # 0 = só CPU (VRAM livre); 99 = tudo na GPU
 ```
 
-Alternativa sem arquivo: env `VISION_HF_REPO` ou flags `--hf`/`--ngl`.
+Alternativa sem arquivo: envs `VISION_HF_REPO`/`VISION_NGL` ou flags
+`--hf`/`--ngl`.
 
 ## Variáveis de ambiente
 
