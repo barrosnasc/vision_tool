@@ -31,12 +31,14 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "bbox": (
             "Responda só com JSON: "
-            "lista de objetos {{label, bbox [x1,y1,x2,y2]}} "
-            "(x1,y1 = canto superior esquerdo, x2,y2 = canto inferior "
-            "direito). Retorne UM objeto por elemento — vários elementos, "
-            "vários objetos. Conte da esquerda para a direita, de cima para "
-            "baixo. Use o MENOR retângulo do elemento; proibido bbox do "
-            "tamanho da imagem inteira; se não achar, responda []. "
+            "lista de objetos {{label, bbox [x1,y1,x2,y2]}}. "
+            "Coordenadas DEVEM ser inteiros normalizados de 0 a 999 "
+            "relativos à imagem, onde (0,0) é o canto superior esquerdo e "
+            "(999,999) é o canto inferior direito. Retorne UM objeto por "
+            "elemento — vários elementos, vários objetos. Conte da "
+            "esquerda para a direita, de cima para baixo. Use o MENOR "
+            "retângulo do elemento; proibido bbox do tamanho da imagem "
+            "inteira; se não achar, responda []. "
             "Exemplo: [{{\"label\":\"item 1\",\"bbox\":[0,0,100,200]}},"
             "{{\"label\":\"item 2\",\"bbox\":[100,0,200,200]}}]. {prompt}"
         ),
@@ -106,8 +108,10 @@ STRINGS: dict[str, dict[str, str]] = {
         ),
         "bbox": (
             "Answer only with JSON: "
-            "a list of objects {{label, bbox [x1,y1,x2,y2]}} "
-            "(x1,y1 = top-left corner, x2,y2 = bottom-right corner). "
+            "a list of objects {{label, bbox [x1,y1,x2,y2]}}. "
+            "Coordinates MUST be integer normalized coordinates from 0 to "
+            "999 relative to the provided image, where (0,0) is the "
+            "top-left corner and (999,999) is the bottom-right corner. "
             "Return ONE object per element — multiple elements, multiple "
             "objects. Count left-to-right, top-to-bottom. Use the SMALLEST "
             "box of the element; never a box the size of the whole image; "

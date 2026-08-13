@@ -100,15 +100,15 @@ string ::=
 number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
 
 ws ::= | " " | "\n" [ \t]{0,20}'''
-# Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} em PIXELS;
-# label limitado a 40 chars; coords até 10000).
+# Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} normalizados
+# 0-999; label limitado a 40 chars).
 GRAMMAR_BBOX = r'''root   ::= array
 array  ::= "[" ws (item (ws "," ws item)*)? ws "]"
 item   ::= "{" ws "\"label\"" ws ":" ws label ws "," ws "\"bbox\"" ws ":" ws coords ws "}"
 coords ::= "[" ws coord ws "," ws coord ws "," ws coord ws "," ws coord ws "]"
 label  ::= "\"" char{1,40} "\""
 char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
-coord  ::= [0-9] | [1-9] [0-9] | [1-9] [0-9] [0-9] | "1000"
+coord  ::= [0-9] | [1-9] [0-9] | [1-9] [0-9] [0-9] | [1-9] [0-9] [0-9] [0-9] | "10000"
 ws     ::= [ \t\n]*'''
 # Espelha grammars/list.gbnf byte a byte (lista JSON de strings).
 GRAMMAR_JSON_ARRAY = r'''root   ::= array
