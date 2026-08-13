@@ -158,6 +158,8 @@ def build_bbox_command(
     hf_repo: str | None = None,
     ctx: int = DEFAULT_CTX,
     ngl: int = DEFAULT_NGL,
+    image_min_tokens: int = 0,
+    image_max_tokens: int = 0,
     max_tokens: int = DEFAULT_MAX_TOKENS,
     verbose: bool = False,
 ) -> list[str]:
@@ -184,6 +186,10 @@ def build_bbox_command(
         )
         cmd = [cmd_bin, "-hf", repo]
     cmd += ["--image", image]
+    if image_min_tokens > 0:
+        cmd += ["--image-min-tokens", str(image_min_tokens)]
+    if image_max_tokens > 0:
+        cmd += ["--image-max-tokens", str(image_max_tokens)]
     cmd += ["--grammar", GRAMMAR_BBOX]
     if ctx > 0:
         cmd += ["-c", str(ctx)]
@@ -279,6 +285,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--grammar",
         metavar="ARQUIVO",
         help="Gramática GBNF alternativa (os modos já têm gramática própria)",
+    )
+    infer.add_argument(
+        "--image-min-tokens",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Tokens mínimos da imagem no encoder de visão (0 = padrão do modelo; "
+             "aumente p/ melhorar precisão de bbox, ex.: 1024)",
+    )
+    infer.add_argument(
+        "--image-max-tokens",
+        type=int,
+        default=0,
+        metavar="N",
+        help="Tokens máximos da imagem no encoder de visão (0 = padrão do modelo)",
     )
     infer.add_argument(
         "--ctx",
@@ -567,6 +588,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if image:
         cmd += ["--image", image]
+
+    if args.image_min_tokens > 0:
+        cmd += ["--image-min-tokens", str(args.image_min_tokens)]
+    if args.image_max_tokens > 0:
+        cmd += ["--image-max-tokens", str(args.image_max_tokens)]
 
     # Gramática: explícita (arquivo) > automática dos modos.
     grammar_file = args.grammar

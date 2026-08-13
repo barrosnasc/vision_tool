@@ -177,6 +177,8 @@ uvx vision-tool --type bbox ui.png "localize o botão Salvar e o título"
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |
 | `--ctx` | Contexto em tokens (padrão: 8192; 0 = padrão do modelo, 128k) |
+| `--image-min-tokens N` | Tokens mínimos da imagem no encoder (0 = padrão; 1024 melhora precisão de bbox, ~4× mais lento) |
+| `--image-max-tokens N` | Tokens máximos da imagem no encoder (0 = padrão do modelo) |
 | `-n, --max-tokens` | Máximo de tokens a gerar (padrão: 512) |
 | `--ngl` | Camadas na GPU (padrão: 99; 0 = CPU) |
 | `--timeout SEG` | Mata o processo após N segundos (libera memória) |
