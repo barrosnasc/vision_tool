@@ -16,11 +16,17 @@ Sobrescrever o modelo:
 from __future__ import annotations
 
 import argparse
+import base64
+import io
 import os
+import re
 import shutil
 import signal
 import subprocess
 import sys
+import tempfile
+
+from PIL import Image, UnidentifiedImageError
 
 # Modelo padrão combinado: Gemma 3 4B com visão, baixado automaticamente.
 DEFAULT_HF_REPO = "ggml-org/gemma-3-4b-it-GGUF"
@@ -31,7 +37,51 @@ DEFAULT_NGL = 99  # GPU (CUDA) como padrão; build CPU ignora com aviso
 # de ~2,5 GB (128k) para ~160 MB. Use --ctx 0 para voltar ao padrão do modelo.
 DEFAULT_CTX = 8192
 
-# Templates do modo --validate.
+# Gramáticas GBNF (fonte canônica: grammars/*.gbnf neste repositório).
+# Restringem a saída no nível dos tokens: o modelo escolhe entre as opções
+# permitidas, mas não consegue gerar texto extra nem aprovar tudo.
+GRAMMAR_VALIDATE = 'root ::= "Sim" | "Não"'
+# Espelha grammars/validate-json.gbnf byte a byte (string raw, sem escapes).
+GRAMMAR_VALIDATE_JSON = r'''root   ::= object
+object ::= "{" ws "\"ok\"" ws ":" ws boolean ws "," ws "\"divergencias\"" ws ":" ws array ws "}"
+array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
+string ::= "\"" char* "\""
+char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+boolean ::= "true" | "false"
+ws     ::= [ \t\n]*'''
+# Espelha grammars/json.gbnf (JSON completo: objeto, array, string, número...).
+GRAMMAR_JSON_FULL = r'''root   ::= object
+value  ::= object | array | string | number | ("true" | "false" | "null") ws
+
+object ::=
+  "{" ws (
+            string ":" ws value
+    ("," ws string ":" ws value)*
+  )? "}" ws
+
+array  ::=
+  "[" ws (
+            value
+    ("," ws value)*
+  )? "]" ws
+
+string ::=
+  "\"" (
+    [^"\\\x7F\x00-\x1F] |
+    "\\" (["\\bfnrt] | "u" [0-9a-fA-F]{4}) # escapes
+  )* "\"" ws
+
+number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1-9]{0,15})? ws
+
+ws ::= | " " | "\n" [ \t]{0,20}'''
+# Espelha grammars/list.gbnf byte a byte (lista JSON de strings).
+GRAMMAR_JSON_ARRAY = r'''root   ::= array
+array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
+string ::= "\"" char* "\""
+char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+ws     ::= [ \t\n]*'''
+
+# Templates dos modos --check/--check-code.
 # Achado empírico: no formato de AFIRMAÇÃO o modelo aprova tudo (viés de
 # concordância); no formato de PERGUNTA ele verifica de verdade. Por isso
 # cada condição vira uma pergunta de sim/não.
@@ -41,9 +91,19 @@ VALIDATE_TEMPLATE = (
     "É verdade que {prompt}?"
 )
 VALIDATE_JSON_TEMPLATE = (
-    "Analise a imagem com atenção. Responda apenas com JSON no formato "
-    '{{"ok": true|false, "divergencias": ["..."]}} à pergunta: é verdade '
-    "que {prompt}?"
+    "Analise a imagem com atenção. Responda apenas com JSON à pergunta: "
+    'é verdade que {prompt}? Regras: use "ok": true apenas se a condição '
+    'for verdadeira na imagem; se for falsa, use "ok": false e liste o '
+    'motivo em "divergencias".'
+)
+LIST_JSON_TEMPLATE = (
+    "Analise a imagem com atenção. Responda apenas com JSON: uma lista de "
+    "strings, uma por item pedido. {prompt}"
+)
+TYPE_JSON_TEMPLATE = (
+    "Analise a imagem com atenção. Responda apenas com JSON válido e "
+    "CONCISO: no máximo 5 campos por objeto e 3 níveis de profundidade. "
+    "Não repita valores nem gere conteúdo além do necessário. {prompt}"
 )
 
 # Caminhos comuns do binário além do PATH (último caso).
@@ -81,25 +141,65 @@ def build_parser() -> argparse.ArgumentParser:
             "execução do llama-mtmd-cli. O modelo é descarregado da memória ao "
             "final do processo."
         ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "exemplos:\n"
+            "  vision-tool tela.png \"descreva a interface\"\n"
+            "  vision-tool --check-code tela.png \"o botão Salvar está visível\"\n"
+            "  vision-tool --json tela.png \"liste os itens do menu\"\n"
+            "  cat tela.png | vision-tool - \"o que mudou?\"\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument(
+    entrada = parser.add_argument_group("entrada")
+    entrada.add_argument(
         "image",
         nargs="?",
-        help="Imagem PNG/JPG ou lista separada por vírgula; omita para chat interativo",
+        help="Imagem ou lista separada por vírgula; '-' lê do stdin (pipe); "
+             "omita para chat interativo",
     )
-    parser.add_argument(
+    entrada.add_argument(
         "prompt",
         nargs="?",
-        help="Descrição/resposta esperada sobre a imagem; omita para chat interativo",
+        help="Descrição ou pergunta sobre a imagem; omita para chat interativo",
     )
 
+    modos = parser.add_argument_group("modos de resposta (escolha no máximo um)")
+    modos.add_argument(
+        "--check",
+        action="store_true",
+        help="Sim/Não em texto (gramática restringe a resposta)",
+    )
+    modos.add_argument(
+        "--check-code",
+        action="store_true",
+        help="Silencioso: veredito só no exit code (0=Sim, 1=Não)",
+    )
+    modos.add_argument(
+        "--check-json",
+        action="store_true",
+        help='Veredito em JSON: {"ok": ..., "divergencias": [...]}',
+    )
+    modos.add_argument(
+        "--type",
+        choices=["json", "list"],
+        metavar="{json,list}",
+        help="Formato da resposta em pergunta aberta: json = JSON completo, "
+             "list = lista JSON de strings",
+    )
     parser.add_argument(
+        "--validate",
+        dest="check_code",
+        action="store_true",
+        help=argparse.SUPPRESS,  # apelido antigo de --check-code
+    )
+
+    modelo = parser.add_argument_group("modelo")
+    modelo.add_argument(
         "-m", "--model",
         help="GGUF local alternativo (padrão: env VISION_MODEL ou o modelo padrão)",
     )
-    parser.add_argument(
+    modelo.add_argument(
         "--hf",
         dest="hf_repo",
         metavar="REPO",
@@ -108,57 +208,150 @@ def build_parser() -> argparse.ArgumentParser:
             f"{DEFAULT_HF_REPO})"
         ),
     )
-    parser.add_argument(
+    modelo.add_argument(
         "--mmproj",
         help="Projetor multimodal .gguf (apenas com -m; padrão: env VISION_MMPROJ)",
     )
-    parser.add_argument(
-        "--validate",
-        action="store_true",
-        help="Modo validação: resposta 'OK' ou apenas as divergências encontradas",
+
+    infer = parser.add_argument_group("inferência")
+    infer.add_argument(
+        "--grammar",
+        metavar="ARQUIVO",
+        help="Gramática GBNF alternativa (os modos já têm gramática própria)",
     )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help='Com --validate: resposta em JSON {"ok": ..., "divergencias": [...]}',
-    )
-    parser.add_argument(
+    infer.add_argument(
         "--ctx",
         type=int,
         default=DEFAULT_CTX,
         help="Tamanho do contexto em tokens (0 = padrão do modelo, 128k)",
     )
-    parser.add_argument(
+    infer.add_argument(
         "-n", "--max-tokens",
         type=int,
         default=DEFAULT_MAX_TOKENS,
         help="Máximo de tokens a gerar",
     )
-    parser.add_argument(
+    infer.add_argument(
         "--ngl",
         type=int,
         default=DEFAULT_NGL,
         help="Camadas na GPU (padrão: 99 = tudo; use 0 para forçar CPU)",
     )
-    parser.add_argument(
+    infer.add_argument(
         "--timeout",
         type=float,
         default=None,
         metavar="SEGUNDOS",
         help="Mata o processo após N segundos (garante liberação de memória)",
     )
-    parser.add_argument(
+
+    dep = parser.add_argument_group("depuração")
+    dep.add_argument(
         "--bin",
         dest="binary",
         metavar="CAMINHO",
         help="Caminho do llama-mtmd-cli (padrão: env LLAMA_MTMD_CLI ou PATH)",
     )
-    parser.add_argument(
+    dep.add_argument(
         "-v", "--verbose",
         action="store_true",
-        help="Mostra o comando executado no stderr",
+        help="Mostra o comando, o texto gerado e os logs do llama.cpp",
     )
     return parser
+
+
+# Limites do decodificador do llama.cpp (stb_image): ~16,7 MP. Normalizamos
+# tudo para PNG e reduzimos imagens acima disso antes de enviar ao modelo.
+_MAX_PIXELS = 15_000_000
+
+
+def _sniff_type(data: bytes) -> str:
+    """Identifica o tipo real do conteúdo (magic numbers) para diagnóstico."""
+    if data.startswith(b"\x89PNG"):
+        return "PNG (decodificação falhou)"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "JPEG (decodificação falhou)"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "WebP (Pillow sem suporte a webp?)"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "GIF"
+    if data[:2] == b"BM":
+        return "BMP"
+    if data[:4] == b"%PDF":
+        return "PDF (não é imagem raster)"
+    if data[:2] == b"PK":
+        return "ZIP/Office"
+    if data[4:12] in (b"ftypavif", b"ftypavis"):
+        return "AVIF (não suportado)"
+    if data[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
+        return "HEIC/HEIF (não suportado)"
+    if data.lstrip().startswith((b"<svg", b"<?xml", b"<html", b"<!DOCTYPE")):
+        return "SVG/XML/HTML (vetorial — o modelo só aceita imagem raster)"
+    try:
+        sample = data[:200].decode("utf-8")
+        if all(ch.isprintable() or ch in "\n\r\t" for ch in sample):
+            return f"texto (começa com: {sample[:60]!r})"
+    except UnicodeDecodeError:
+        pass
+    return "formato desconhecido"
+
+
+def _normalize_image(data: bytes) -> str:
+    """Decodifica bytes de imagem (qualquer formato do Pillow), converte para
+    PNG, reduz se for grande demais e devolve o caminho do arquivo temporário."""
+    try:
+        img = Image.open(io.BytesIO(data))
+        img.load()
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError(
+            "o conteúdo do stdin não é uma imagem decodificável — detectado: "
+            f"{_sniff_type(data)}. Dica: tente 'wl-paste --type image/png' "
+            "ou copie a imagem novamente."
+        ) from exc
+
+    if img.mode not in ("RGB", "RGBA", "L"):
+        img = img.convert("RGB")
+
+    width, height = img.size
+    pixels = width * height
+    if pixels > _MAX_PIXELS:
+        factor = (_MAX_PIXELS / pixels) ** 0.5
+        img = img.resize((max(1, int(width * factor)), max(1, int(height * factor))),
+                         Image.LANCZOS)
+
+    fd, path = tempfile.mkstemp(suffix=".png", prefix="vision-stdin-")
+    with os.fdopen(fd, "wb") as f:
+        img.save(f, "PNG")
+    return path
+
+
+# Browsers colocam a imagem copiada no clipboard como HTML com <img
+# src="data:image/...;base64,...">. Extraímos isso automaticamente.
+_DATA_IMAGE_RE = re.compile(rb"data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)")
+
+
+def _read_stdin_image() -> str:
+    """Lê a imagem do stdin e normaliza (devolve o caminho do temp).
+
+    Se o clipboard entregar HTML (wl-paste sem --type), procura a imagem
+    embutida como data:image e a usa."""
+    data = sys.stdin.buffer.read()
+    if not data:
+        raise ValueError(
+            "stdin vazio: envie a imagem via pipe "
+            '(ex.: cat tela.png | vision-tool - "...")'
+        )
+    head = data[:512].lstrip()
+    if head.startswith((b"<html", b"<!DOCTYPE", b"<meta", b"<img", b"<?xml")):
+        match = _DATA_IMAGE_RE.search(data)
+        if match:
+            data = base64.b64decode(match.group(2))
+        else:
+            raise ValueError(
+                "o clipboard entregou HTML sem imagem embutida. Dica: use "
+                "'wl-paste --type image/png' ou copie a imagem novamente."
+            )
+    return _normalize_image(data)
 
 
 def _die_with_parent():
@@ -180,6 +373,17 @@ def _preexec():
     return _die_with_parent if sys.platform.startswith("linux") else None
 
 
+def _strip_fences(text: str) -> str:
+    """Remove code fences (```json ... ```) que o modelo às vezes adiciona."""
+    out = text.strip()
+    lines = out.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -199,19 +403,59 @@ def main(argv: list[str] | None = None) -> int:
         repo = args.hf_repo or os.environ.get("VISION_HF_REPO") or DEFAULT_HF_REPO
         cmd = [binary, "-hf", repo]
 
-    if args.json and not args.validate:
-        parser.error("--json exige --validate")
+    modes = {
+        "--check": args.check,
+        "--check-code": args.check_code,
+        "--check-json": args.check_json,
+        "--type": args.type,
+    }
+    active = [name for name, on in modes.items() if on]
+    if len(active) > 1:
+        parser.error(f"escolha apenas um modo de resposta por vez ({', '.join(active)})")
+
+    check_mode = args.check or args.check_code or args.check_json
+    check_json = args.check_json
+
+    tmp_image = None
+    image = args.image
+    if image == "-":
+        try:
+            image = tmp_image = _read_stdin_image()
+        except ValueError as exc:
+            parser.error(str(exc))
 
     prompt = args.prompt
-    if prompt and args.validate:
-        template = VALIDATE_JSON_TEMPLATE if args.json else VALIDATE_TEMPLATE
-        prompt = template.format(prompt=prompt)
+    if prompt and check_json:
+        prompt = VALIDATE_JSON_TEMPLATE.format(prompt=prompt)
+    elif prompt and check_mode:
+        prompt = VALIDATE_TEMPLATE.format(prompt=prompt)
+    elif prompt and args.type == "list":
+        prompt = LIST_JSON_TEMPLATE.format(prompt=prompt)
+    elif prompt and args.type == "json":
+        prompt = TYPE_JSON_TEMPLATE.format(prompt=prompt)
 
-    if args.image:
-        cmd += ["--image", args.image]
+    if image:
+        cmd += ["--image", image]
+
+    # Gramática: explícita (arquivo) > automática dos modos.
+    grammar_file = args.grammar
+    if not grammar_file and check_json:
+        cmd += ["--grammar", GRAMMAR_VALIDATE_JSON]
+    elif not grammar_file and args.type == "list":
+        cmd += ["--grammar", GRAMMAR_JSON_ARRAY]
+    elif not grammar_file and args.type == "json":
+        cmd += ["--grammar", GRAMMAR_JSON_FULL]
+    elif not grammar_file and check_mode:
+        cmd += ["--grammar", GRAMMAR_VALIDATE]
+    elif grammar_file:
+        cmd += ["--grammar-file", grammar_file]
 
     if args.ctx > 0:
         cmd += ["-c", str(args.ctx)]
+
+    # Silencia logs do llama-mtmd-cli por padrão (só erros); -v mostra tudo.
+    if not args.verbose:
+        cmd += ["-lv", "0"]
 
     cmd += ["-ngl", str(args.ngl), "-n", str(args.max_tokens)]
 
@@ -222,20 +466,45 @@ def main(argv: list[str] | None = None) -> int:
         print("+", " ".join(cmd), file=sys.stderr)
 
     try:
-        if args.json:
+        if args.check_code and not args.json:
+            # --check-code: veredito (Sim/Não, garantido pela gramática)
+            # vira código de saída — 0 = Sim, 1 = Não (convenção test/grep;
+            # >= 2 reservado para erros). Sem saída por padrão; -v imprime
+            # tudo e falhas inesperadas mostram o diagnóstico.
+            proc = subprocess.run(
+                cmd, check=False, timeout=args.timeout,
+                capture_output=True, text=True, preexec_fn=_preexec(),
+            )
+            verdict = proc.stdout.strip().strip('"').lower()
+            if proc.stdout and (args.verbose or not verdict):
+                print(proc.stdout, end="")
+            if proc.stderr and (args.verbose or not verdict):
+                print(proc.stderr, file=sys.stderr, end="")
+            if verdict == "sim":
+                return 0
+            if verdict in ("não", "nao"):
+                return 1  # falso, como test/grep/diff (>=2 fica para erros)
+            return proc.returncode
+        if args.check:
+            # --check: imprime o veredito em texto; exit code normal do processo.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),
             )
             if proc.stdout:
-                out = proc.stdout.strip()
-                lines = out.splitlines()
-                if lines and lines[0].strip().startswith("```"):
-                    lines = lines[1:]
-                if lines and lines[-1].strip() == "```":
-                    lines = lines[:-1]
-                print("\n".join(lines).strip())
-            if proc.stderr:
+                print(proc.stdout, end="")
+            if proc.stderr and (args.verbose or proc.returncode != 0):
+                print(proc.stderr, file=sys.stderr, end="")
+            return proc.returncode
+        if args.type or check_json:
+            proc = subprocess.run(
+                cmd, check=False, timeout=args.timeout,
+                capture_output=True, text=True, preexec_fn=_preexec(),
+            )
+            if proc.stdout:
+                out = _strip_fences(proc.stdout)
+                print(out)
+            if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")
             return proc.returncode
         return subprocess.run(
@@ -255,6 +524,12 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         return 124
+    finally:
+        if tmp_image:
+            try:
+                os.remove(tmp_image)
+            except OSError:
+                pass
 
 
 if __name__ == "__main__":

@@ -74,7 +74,7 @@ uvx --from git+https://github.com/barrosnasc/vision_tool vision-tool ui.png "pro
 Validação simples:
 
 ```bash
-uvx vision-tool --validate ui.png "o botão Salvar está visível e o título é Configurações"
+uvx vision-tool --check ui.png "o botão Salvar está visível e o título é Configurações"
 # → Sim
 ```
 
@@ -83,6 +83,19 @@ Comparação antes/depois:
 ```bash
 uvx vision-tool antes.png,depois.png "Liste o que mudou entre as duas interfaces"
 ```
+
+Imagem via pipe (stdin com `-`, convenção Unix):
+
+```bash
+cat screenshot.png | uvx vision-tool --check - "o botão Salvar está visível"
+
+# clipboard (Wayland) direto para o modelo
+wl-paste | uvx vision-tool - "como está a paleta de cores"
+```
+
+O stdin aceita qualquer formato do Pillow (PNG, JPEG, WebP, GIF, BMP...),
+é convertido para PNG e imagens com mais de ~15 MP são reduzidas
+automaticamente antes de ir para o modelo.
 
 Pergunta aberta:
 
@@ -96,17 +109,27 @@ Chat interativo (sem argumentos):
 uvx vision-tool
 ```
 
-## Modo validação (`--validate`)
+## Modo checagem (`--check` e `--check-code`)
 
 Transforma as condições em perguntas de sim/não — o formato que, nos testes,
-fez o modelo verificar de verdade em vez de aprovar tudo:
+fez o modelo verificar de verdade em vez de aprovar tudo. A gramática GBNF
+restringe a resposta a exatamente `Sim` ou `Não`.
+
+Com texto (`--check`):
 
 ```bash
-uvx vision-tool --validate ui.png "o arquivo aberto na aba é geometry.odin"
+uvx vision-tool --check ui.png "o arquivo aberto na aba é geometry.odin"
 # → Sim
 
-uvx vision-tool --validate ui.png "o arquivo aberto na aba é main.rs"
+uvx vision-tool --check ui.png "o arquivo aberto na aba é main.rs"
 # → Não
+```
+
+Silencioso, com veredito no código de saída (`--check-code`):
+
+```bash
+uvx vision-tool --check-code ui.png "o botão Salvar está visível"
+echo $?   # 0 = Sim, 1 = Não (como test/grep/diff)
 ```
 
 Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
@@ -114,18 +137,36 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 1. **Fraseie as condições na forma positiva** — "o botão está visível"
    funciona; "o botão não está visível / está oculto" confunde o modelo
 2. Uma condição falsa faz a resposta ser "Não" (vale para listas de condições)
-3. `--json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
-   tem viés de aprovar tudo — prefira o modo texto; o JSON fica confiável em
-   modelos maiores (ex.: Qwen2.5-VL 7B)
+3. `--check-json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
+   tem viés de aprovar tudo — prefira os modos texto/código; o JSON fica
+   confiável em modelos maiores (ex.: Qwen2.5-VL 7B)
+4. `-v` mostra o texto gerado e os logs do llama.cpp (útil para depurar)
+
+## Modo formatado (`--type json|list`)
+
+Perguntas abertas com resposta **estruturada**, com gramática própria —
+`--type` referencia a gramática a usar:
+
+```bash
+# lista JSON de strings (extração de itens da tela)
+uvx vision-tool --type list ui.png "liste os itens do menu de navegação visíveis"
+# → ["Home", "Illustrations", "Manga", "Novels"]
+
+# JSON completo (objeto/estrutura livre, com pedido de concisão no template)
+uvx vision-tool --type json ui.png "resuma a página em JSON com título e seções"
+# → {"titulo": "...", "secoes": [...]}
+```
 
 ## Opções
 
 | Opção | Descrição |
 |---|---|
-| `image` | Imagem PNG/JPG ou lista separada por vírgula (posicional) |
+| `image` | Imagem ou lista separada por vírgula; `-` = ler do stdin (qualquer formato do Pillow) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
-| `--validate` | Modo validação: responde Sim/Não para as condições |
-| `--json` | Com `--validate`: resposta JSON (modelos maiores) |
+| `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
+| `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |
+| `--check-json` | Com `--check`: veredito em JSON `{ok, divergencias}` (modelos maiores) |
+| `--type {json,list}` | Formato em pergunta aberta: JSON completo ou lista de strings |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |
