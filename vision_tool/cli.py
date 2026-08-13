@@ -148,6 +148,33 @@ def _find_binary(explicit: str | None) -> str:
     return "llama-mtmd-cli"
 
 
+_IMAGE_MAX_PIXELS_BY_FAMILY: dict[str, int] = {
+    # hparams image_max_pixels do encoder de visão de cada família de modelo.
+    "lfm": 262144,    # LFM2.5-VL: 512x512
+    "gemma": 802816,  # Gemma 3: 896x896
+}
+
+
+def _clamp_image_min_tokens(tokens: int, *hints: str) -> int:
+    """Limita --image-min-tokens ao teto do encoder de visão do modelo.
+
+    Se o mínimo pedido excede o image_max_pixels do mmproj, o
+    llama-mtmd-cli falha na carga do modelo de visão
+    ("image_max_pixels is less than image_min_pixels"). Devolve o maior
+    valor aceitável para a família detectada nos `hints`.
+    """
+    if tokens <= 0:
+        return tokens
+    low = " ".join(h or "" for h in hints).lower()
+    for family, max_pixels in _IMAGE_MAX_PIXELS_BY_FAMILY.items():
+        if family in low:
+            # O llama-mtmd-cli converte tokens em pixels como tokens * 1024
+            # (medido: 1024 tokens -> 1048576 px; 512 tokens -> 524288 px).
+            max_tokens = max_pixels // 1024
+            return min(tokens, max_tokens)
+    return tokens
+
+
 def build_bbox_command(
     image: str,
     prompt: str,
@@ -173,21 +200,28 @@ def build_bbox_command(
     cmd_bin = _find_binary(binary)
     model = model or os.environ.get("VISION_MODEL")
     mmproj = mmproj or os.environ.get("VISION_MMPROJ")
+    repo = (
+        hf_repo
+        or os.environ.get("VISION_HF_REPO")
+        or _LOCAL_HF_REPO
+        or DEFAULT_HF_REPO
+    )
     if model:
         cmd = [cmd_bin, "-m", model]
         if mmproj:
             cmd += ["--mmproj", mmproj]
     else:
-        repo = (
-            hf_repo
-            or os.environ.get("VISION_HF_REPO")
-            or _LOCAL_HF_REPO
-            or DEFAULT_HF_REPO
-        )
         cmd = [cmd_bin, "-hf", repo]
     cmd += ["--image", image]
     if image_min_tokens > 0:
-        cmd += ["--image-min-tokens", str(image_min_tokens)]
+        clamped = _clamp_image_min_tokens(image_min_tokens, model, repo)
+        if clamped != image_min_tokens:
+            print(
+                f"aviso: --image-min-tokens {image_min_tokens} limitado a "
+                f"{clamped} (teto do encoder de visão do modelo)",
+                file=sys.stderr,
+            )
+        cmd += ["--image-min-tokens", str(clamped)]
     if image_max_tokens > 0:
         cmd += ["--image-max-tokens", str(image_max_tokens)]
     cmd += ["--grammar", GRAMMAR_BBOX]
@@ -490,7 +524,7 @@ def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
     y_scale = height / 999.0 if dims and height else 1.0
     # Compensação do offset sistemático do modelo: +2% da largura em x
     # (medido em grades de calibração: 1500px -> +25, 2000px -> +40).
-    x_offset = 0.02 * width if dims and width else 0.0
+    x_offset = 0
     for item in items:
         bbox = item.get("bbox") if isinstance(item, dict) else None
         label = item.get("label") if isinstance(item, dict) else None
@@ -538,6 +572,12 @@ def main(argv: list[str] | None = None) -> int:
 
     model = args.model or os.environ.get("VISION_MODEL")
     mmproj = args.mmproj or os.environ.get("VISION_MMPROJ")
+    repo = (
+        args.hf_repo
+        or os.environ.get("VISION_HF_REPO")
+        or _LOCAL_HF_REPO
+        or DEFAULT_HF_REPO
+    )
     binary = _find_binary(args.binary)
 
     if model:
@@ -545,12 +585,6 @@ def main(argv: list[str] | None = None) -> int:
         if mmproj:
             cmd += ["--mmproj", mmproj]
     else:
-        repo = (
-            args.hf_repo
-            or os.environ.get("VISION_HF_REPO")
-            or _LOCAL_HF_REPO
-            or DEFAULT_HF_REPO
-        )
         cmd = [binary, "-hf", repo]
 
     modes = {
@@ -605,7 +639,14 @@ def main(argv: list[str] | None = None) -> int:
         cmd += ["--image", image]
 
     if args.image_min_tokens > 0:
-        cmd += ["--image-min-tokens", str(args.image_min_tokens)]
+        clamped = _clamp_image_min_tokens(args.image_min_tokens, model, repo)
+        if clamped != args.image_min_tokens:
+            print(
+                f"aviso: --image-min-tokens {args.image_min_tokens} limitado a "
+                f"{clamped} (teto do encoder de visão do modelo)",
+                file=sys.stderr,
+            )
+        cmd += ["--image-min-tokens", str(clamped)]
     if args.image_max_tokens > 0:
         cmd += ["--image-max-tokens", str(args.image_max_tokens)]
 
