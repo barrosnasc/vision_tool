@@ -19,12 +19,12 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
 ## Modos
 
 1. **Validação (recomendado)** — use `--validate` e frases na forma POSITIVA.
-   Resposta é `Sim` ou `Não` e o **veredito sai no código de saída**
-   (0 = Sim, 3 = Não):
+   **Sem saída de texto**: o veredito vai no código de saída (0 = Sim,
+   3 = Não). Use `-v` para ver o texto e os logs:
 
    ```
    uvx vision-tool --validate "tela.png" "o botão Salvar está visível e o título é Configurações"
-   # → "Sim", exit 0
+   # → exit 0 (Sim)
    ```
 
    Regras:

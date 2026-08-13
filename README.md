@@ -120,7 +120,8 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 4. A resposta é restringida por **gramática GBNF**: no `--validate` a saída é
    exatamente `Sim` ou `Não` (sem texto extra); no `--json` o formato é sempre
    JSON válido
-5. O `--validate` devolve o veredito no **código de saída** — sem parsear texto:
+5. O `--validate` devolve o veredito **apenas no código de saída** (saída
+   silenciosa; `-v` imprime o texto e os logs):
    `0` = Sim, `3` = Não (os demais: `127` binário ausente, `124` timeout)
 
 ## Opções
@@ -129,7 +130,7 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 |---|---|
 | `image` | Imagem PNG/JPG ou lista separada por vírgula (posicional) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
-| `--validate` | Modo validação: responde Sim/Não e devolve **exit 0/3** |
+| `--validate` | Modo validação: **sem saída**, veredito no exit code (0=Sim, 3=Não) |
 | `--json` | Com `--validate`: resposta JSON (modelos maiores) |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |

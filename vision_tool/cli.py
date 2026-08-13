@@ -250,6 +250,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.ctx > 0:
         cmd += ["-c", str(args.ctx)]
 
+    # Silencia logs do llama-mtmd-cli por padrão (só erros); -v mostra tudo.
+    if not args.verbose:
+        cmd += ["-lv", "0"]
+
     cmd += ["-ngl", str(args.ngl), "-n", str(args.max_tokens)]
 
     if prompt:
@@ -261,16 +265,17 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.validate and not args.json:
             # Modo validação: o veredito (Sim/Não, garantido pela gramática)
-            # vira código de saída — 0 = Sim, 3 = Não. O texto também é impresso.
+            # vira código de saída — 0 = Sim, 3 = Não. Sem saída por padrão;
+            # -v imprime tudo e falhas inesperadas mostram o diagnóstico.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),
             )
-            if proc.stdout:
-                print(proc.stdout, end="")
-            if proc.stderr:
-                print(proc.stderr, file=sys.stderr, end="")
             verdict = proc.stdout.strip().strip('"').lower()
+            if proc.stdout and (args.verbose or not verdict):
+                print(proc.stdout, end="")
+            if proc.stderr and (args.verbose or not verdict):
+                print(proc.stderr, file=sys.stderr, end="")
             if verdict == "sim":
                 return 0
             if verdict in ("não", "nao"):
@@ -284,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
             if proc.stdout:
                 out = _strip_fences(proc.stdout)
                 print(out)
-            if proc.stderr:
+            if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")
             return proc.returncode
         return subprocess.run(
