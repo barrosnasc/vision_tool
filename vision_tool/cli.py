@@ -28,7 +28,10 @@ import tempfile
 
 from PIL import Image, UnidentifiedImageError
 
-# Modelo padrão combinado: Gemma 3 4B com visão, baixado automaticamente.
+from vision_tool.i18n import resolve_lang
+
+# Modelo padrão publicado: Gemma 3 4B com visão.
+# Sobrescrita local: vision_tool/local_config.py (não versionado) ou env VISION_HF_REPO.
 DEFAULT_HF_REPO = "ggml-org/gemma-3-4b-it-GGUF"
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_NGL = 99  # GPU (CUDA) como padrão; build CPU ignora com aviso
@@ -40,7 +43,7 @@ DEFAULT_CTX = 8192
 # Gramáticas GBNF (fonte canônica: grammars/*.gbnf neste repositório).
 # Restringem a saída no nível dos tokens: o modelo escolhe entre as opções
 # permitidas, mas não consegue gerar texto extra nem aprovar tudo.
-GRAMMAR_VALIDATE = 'root ::= "Sim" | "Não"'
+# A do --check é gerada por idioma: pt -> "Sim" | "Não", en -> "Yes" | "No".
 # Espelha grammars/validate-json.gbnf byte a byte (string raw, sem escapes).
 GRAMMAR_VALIDATE_JSON = r'''root   ::= object
 object ::= "{" ws "\"ok\"" ws ":" ws boolean ws "," ws "\"divergencias\"" ws ":" ws array ws "}"
@@ -81,30 +84,9 @@ string ::= "\"" char* "\""
 char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
 ws     ::= [ \t\n]*'''
 
-# Templates dos modos --check/--check-code.
-# Achado empírico: no formato de AFIRMAÇÃO o modelo aprova tudo (viés de
-# concordância); no formato de PERGUNTA ele verifica de verdade. Por isso
-# cada condição vira uma pergunta de sim/não.
-VALIDATE_TEMPLATE = (
-    "Analise a imagem com atenção. Para CADA pergunta abaixo, responda "
-    "apenas 'sim' ou 'não' (sem repetir a pergunta), uma linha por resposta:\n"
-    "É verdade que {prompt}?"
-)
-VALIDATE_JSON_TEMPLATE = (
-    "Analise a imagem com atenção. Responda apenas com JSON à pergunta: "
-    'é verdade que {prompt}? Regras: use "ok": true apenas se a condição '
-    'for verdadeira na imagem; se for falsa, use "ok": false e liste o '
-    'motivo em "divergencias".'
-)
-LIST_JSON_TEMPLATE = (
-    "Analise a imagem com atenção. Responda apenas com JSON: uma lista de "
-    "strings, uma por item pedido. {prompt}"
-)
-TYPE_JSON_TEMPLATE = (
-    "Analise a imagem com atenção. Responda apenas com JSON válido e "
-    "CONCISO: no máximo 5 campos por objeto e 3 níveis de profundidade. "
-    "Não repita valores nem gere conteúdo além do necessário. {prompt}"
-)
+# Templates e mensagens em pt/en: vision_tool/i18n.py (selecionados por
+# --lang ou pelo locale do sistema). Gramática do --check varia junto:
+# pt -> "Sim" | "Não", en -> "Yes" | "No".
 
 # Caminhos comuns do binário além do PATH (último caso).
 _COMMON_BINARY_PATHS = (
@@ -245,6 +227,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Mata o processo após N segundos (garante liberação de memória)",
     )
 
+    ui = parser.add_argument_group("interface")
+    ui.add_argument(
+        "--lang",
+        choices=["auto", "pt", "en"],
+        default="auto",
+        help="Idioma dos prompts e mensagens (auto = locale do sistema)",
+    )
+
     dep = parser.add_argument_group("depuração")
     dep.add_argument(
         "--bin",
@@ -265,38 +255,38 @@ def build_parser() -> argparse.ArgumentParser:
 _MAX_PIXELS = 15_000_000
 
 
-def _sniff_type(data: bytes) -> str:
+def _sniff_type(data: bytes, sniff: dict[str, str]) -> str:
     """Identifica o tipo real do conteúdo (magic numbers) para diagnóstico."""
     if data.startswith(b"\x89PNG"):
-        return "PNG (decodificação falhou)"
+        return sniff["png"]
     if data.startswith(b"\xff\xd8\xff"):
-        return "JPEG (decodificação falhou)"
+        return sniff["jpeg"]
     if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
-        return "WebP (Pillow sem suporte a webp?)"
+        return sniff["webp"]
     if data[:6] in (b"GIF87a", b"GIF89a"):
-        return "GIF"
+        return sniff["gif"]
     if data[:2] == b"BM":
-        return "BMP"
+        return sniff["bmp"]
     if data[:4] == b"%PDF":
-        return "PDF (não é imagem raster)"
+        return sniff["pdf"]
     if data[:2] == b"PK":
-        return "ZIP/Office"
+        return sniff["zip"]
     if data[4:12] in (b"ftypavif", b"ftypavis"):
-        return "AVIF (não suportado)"
+        return sniff["avif"]
     if data[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
-        return "HEIC/HEIF (não suportado)"
+        return sniff["heic"]
     if data.lstrip().startswith((b"<svg", b"<?xml", b"<html", b"<!DOCTYPE")):
-        return "SVG/XML/HTML (vetorial — o modelo só aceita imagem raster)"
+        return sniff["svg"]
     try:
         sample = data[:200].decode("utf-8")
         if all(ch.isprintable() or ch in "\n\r\t" for ch in sample):
-            return f"texto (começa com: {sample[:60]!r})"
+            return sniff["text"].format(preview=repr(sample[:60]))
     except UnicodeDecodeError:
         pass
-    return "formato desconhecido"
+    return sniff["unknown"]
 
 
-def _normalize_image(data: bytes) -> str:
+def _normalize_image(data: bytes, t: dict[str, str]) -> str:
     """Decodifica bytes de imagem (qualquer formato do Pillow), converte para
     PNG, reduz se for grande demais e devolve o caminho do arquivo temporário."""
     try:
@@ -304,9 +294,7 @@ def _normalize_image(data: bytes) -> str:
         img.load()
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError(
-            "o conteúdo do stdin não é uma imagem decodificável — detectado: "
-            f"{_sniff_type(data)}. Dica: tente 'wl-paste --type image/png' "
-            "ou copie a imagem novamente."
+            t["not_image"].format(tipo=_sniff_type(data, t["sniff"]))
         ) from exc
 
     if img.mode not in ("RGB", "RGBA", "L"):
@@ -330,28 +318,22 @@ def _normalize_image(data: bytes) -> str:
 _DATA_IMAGE_RE = re.compile(rb"data:(image/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)")
 
 
-def _read_stdin_image() -> str:
+def _read_stdin_image(t: dict[str, str]) -> str:
     """Lê a imagem do stdin e normaliza (devolve o caminho do temp).
 
     Se o clipboard entregar HTML (wl-paste sem --type), procura a imagem
     embutida como data:image e a usa."""
     data = sys.stdin.buffer.read()
     if not data:
-        raise ValueError(
-            "stdin vazio: envie a imagem via pipe "
-            '(ex.: cat tela.png | vision-tool - "...")'
-        )
+        raise ValueError(t["stdin_empty"])
     head = data[:512].lstrip()
     if head.startswith((b"<html", b"<!DOCTYPE", b"<meta", b"<img", b"<?xml")):
         match = _DATA_IMAGE_RE.search(data)
         if match:
             data = base64.b64decode(match.group(2))
         else:
-            raise ValueError(
-                "o clipboard entregou HTML sem imagem embutida. Dica: use "
-                "'wl-paste --type image/png' ou copie a imagem novamente."
-            )
-    return _normalize_image(data)
+            raise ValueError(t["html_no_image"])
+    return _normalize_image(data, t)
 
 
 def _die_with_parent():
@@ -388,8 +370,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    lang, t = resolve_lang(None if args.lang == "auto" else args.lang)
+
     if args.image and not args.prompt:
-        parser.error("informe também o prompt/descrição esperada (ou omita a imagem para chat interativo)")
+        parser.error(t["image_requires_prompt"])
 
     model = args.model or os.environ.get("VISION_MODEL")
     mmproj = args.mmproj or os.environ.get("VISION_MMPROJ")
@@ -400,7 +384,16 @@ def main(argv: list[str] | None = None) -> int:
         if mmproj:
             cmd += ["--mmproj", mmproj]
     else:
-        repo = args.hf_repo or os.environ.get("VISION_HF_REPO") or DEFAULT_HF_REPO
+        try:
+            from vision_tool.local_config import DEFAULT_HF_REPO as _LOCAL_REPO
+        except ImportError:
+            _LOCAL_REPO = None
+        repo = (
+            args.hf_repo
+            or os.environ.get("VISION_HF_REPO")
+            or _LOCAL_REPO
+            or DEFAULT_HF_REPO
+        )
         cmd = [binary, "-hf", repo]
 
     modes = {
@@ -411,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     active = [name for name, on in modes.items() if on]
     if len(active) > 1:
-        parser.error(f"escolha apenas um modo de resposta por vez ({', '.join(active)})")
+        parser.error(t["one_mode"].format(modos=", ".join(active)))
 
     check_mode = args.check or args.check_code or args.check_json
     check_json = args.check_json
@@ -420,19 +413,19 @@ def main(argv: list[str] | None = None) -> int:
     image = args.image
     if image == "-":
         try:
-            image = tmp_image = _read_stdin_image()
+            image = tmp_image = _read_stdin_image(t)
         except ValueError as exc:
             parser.error(str(exc))
 
     prompt = args.prompt
     if prompt and check_json:
-        prompt = VALIDATE_JSON_TEMPLATE.format(prompt=prompt)
+        prompt = t["validate_json"].format(prompt=prompt)
     elif prompt and check_mode:
-        prompt = VALIDATE_TEMPLATE.format(prompt=prompt)
+        prompt = t["validate"].format(prompt=prompt)
     elif prompt and args.type == "list":
-        prompt = LIST_JSON_TEMPLATE.format(prompt=prompt)
+        prompt = t["list"].format(prompt=prompt)
     elif prompt and args.type == "json":
-        prompt = TYPE_JSON_TEMPLATE.format(prompt=prompt)
+        prompt = t["type_json"].format(prompt=prompt)
 
     if image:
         cmd += ["--image", image]
@@ -446,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
     elif not grammar_file and args.type == "json":
         cmd += ["--grammar", GRAMMAR_JSON_FULL]
     elif not grammar_file and check_mode:
-        cmd += ["--grammar", GRAMMAR_VALIDATE]
+        cmd += ["--grammar", f'root ::= "{t["sim"]}" | "{t["nao"]}"']
     elif grammar_file:
         cmd += ["--grammar-file", grammar_file]
 
@@ -480,9 +473,9 @@ def main(argv: list[str] | None = None) -> int:
                 print(proc.stdout, end="")
             if proc.stderr and (args.verbose or not verdict):
                 print(proc.stderr, file=sys.stderr, end="")
-            if verdict == "sim":
+            if verdict in ("sim", "yes"):
                 return 0
-            if verdict in ("não", "nao"):
+            if verdict in ("não", "nao", "no"):
                 return 1  # falso, como test/grep/diff (>=2 fica para erros)
             return proc.returncode
         if args.check:
@@ -512,15 +505,13 @@ def main(argv: list[str] | None = None) -> int:
         ).returncode
     except FileNotFoundError:
         print(
-            f"erro: '{binary}' não encontrado. Instale o llama.cpp "
-            f"(https://github.com/ggml-org/llama.cpp) ou defina LLAMA_MTMD_CLI.",
+            t["binary_not_found"].format(bin=binary),
             file=sys.stderr,
         )
         return 127
     except subprocess.TimeoutExpired:
         print(
-            f"erro: tempo esgotado ({args.timeout}s) — processo finalizado e "
-            "memória liberada.",
+            t["timeout"].format(seg=args.timeout),
             file=sys.stderr,
         )
         return 124

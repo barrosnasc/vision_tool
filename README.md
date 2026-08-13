@@ -175,7 +175,31 @@ uvx vision-tool --type json ui.png "resuma a página em JSON com título e seç�
 | `--ngl` | Camadas na GPU (padrão: 99; 0 = CPU) |
 | `--timeout SEG` | Mata o processo após N segundos (libera memória) |
 | `--bin` | Caminho do `llama-mtmd-cli` (env `LLAMA_MTMD_CLI`) |
+| `--lang {auto,pt,en}` | Idioma dos prompts e mensagens (auto = locale do sistema) |
 | `-v, --verbose` | Mostra o comando executado |
+
+## Internacionalização
+
+Prompts do modelo e mensagens de erro em **pt-BR** e **inglês**. O idioma
+padrão é detectado pelo locale do sistema (LANG/LC_*) e pode ser trocado:
+
+```bash
+uvx vision-tool --check --lang en tela.png "the Save button is visible"
+# → Yes
+```
+
+A gramática do `--check` acompanha o idioma (`Sim`/`Não` ou `Yes`/`No`).
+
+## Configuração local de modelo
+
+Para trocar o modelo padrão só na sua máquina, crie
+`vision_tool/local_config.py` (não versionado pelo git):
+
+```python
+DEFAULT_HF_REPO = "mradermacher/LFM2.5-VL-3B-absolute-heresy-GGUF:Q8_0"
+```
+
+Alternativa sem arquivo: env `VISION_HF_REPO` ou flag `--hf`.
 
 ## Variáveis de ambiente
 
