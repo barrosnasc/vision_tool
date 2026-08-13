@@ -61,8 +61,8 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
 - Primeira execução pode demorar (download do modelo); depois, segundos.
 - O processo encerra e libera a memória ao final (use `--timeout 300` como rede
   de segurança em execuções longas).
-- Códigos de saída: com `--check-code`, `0`=Sim e `3`=Não; demais: `127`
-  binário não encontrado, `124` timeout.
+- Códigos de saída: com `--check-code`, `0`=Sim e `1`=Não (convenção
+  test/grep/diff); demais: `127` binário não encontrado, `124` timeout.
 
 ## Exemplos de uso (fluxo de alteração de interface)
 
