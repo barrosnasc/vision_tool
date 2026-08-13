@@ -488,6 +488,9 @@ def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
     # de teste tinham altura 1000 — coincidência).
     x_scale = width / 999.0 if dims and width else 1.0
     y_scale = height / 999.0 if dims and height else 1.0
+    # Compensação do offset sistemático do modelo: +2% da largura em x
+    # (medido em grades de calibração: 1500px -> +25, 2000px -> +40).
+    x_offset = 0.02 * width if dims and width else 0.0
     for item in items:
         bbox = item.get("bbox") if isinstance(item, dict) else None
         label = item.get("label") if isinstance(item, dict) else None
@@ -496,7 +499,7 @@ def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
             and all(isinstance(v, (int, float)) for v in bbox)
         ):
             x1, y1, x2, y2 = (float(v) for v in bbox)
-            x1, x2 = x1 * x_scale, x2 * x_scale
+            x1, x2 = x1 * x_scale - x_offset, x2 * x_scale - x_offset
             y1, y2 = y1 * y_scale, y2 * y_scale
             if isinstance(item, dict):
                 item["bbox"] = [round(x1), round(y1), round(x2), round(y2)]
