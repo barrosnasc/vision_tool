@@ -7,7 +7,7 @@ GPU e modelo padrão já configurados — o agente não especifica nada disso.
 ## Comando
 
 ```
-uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
+uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condição>"
 ```
 
 ## Parâmetros
@@ -18,29 +18,38 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
 
 ## Modos
 
-1. **Validação (recomendado)** — use `--validate` e frases na forma POSITIVA.
-   **Sem saída de texto**: o veredito vai no código de saída (0 = Sim,
-   3 = Não). Use `-v` para ver o texto e os logs:
+1. **Checagem silenciosa (recomendado)** — `--check-code`: sem saída de
+   texto; o veredito vai no código de saída (0 = Sim, 3 = Não). Use frases
+   na forma POSITIVA:
 
    ```
-   uvx vision-tool --validate "tela.png" "o botão Salvar está visível e o título é Configurações"
+   uvx vision-tool --check-code "tela.png" "o botão Salvar está visível e o título é Configurações"
    # → exit 0 (Sim)
    ```
 
    Regras:
-   - Uma condição falsa ⇒ resposta `Não` (exit 3)
+   - Uma condição falsa ⇒ `Não` (exit 3)
    - Evite negações ("não está", "oculto") — confundem o modelo
-   - A resposta é restringida por gramática: saída exata `Sim` ou `Não`
+   - A resposta é restringida por gramática: o modelo só pode responder
+     `Sim` ou `Não`; `-v` mostra o texto e os logs para depuração
 
-3. **JSON estruturado** — `--validate --json`: formato sempre válido
+2. **Checagem com texto** — `--check`: imprime `Sim` ou `Não` (exit code
+   normal do processo):
+
+   ```
+   uvx vision-tool --check "tela.png" "o botão Salvar está visível"
+   # → Sim
+   ```
+
+3. **JSON estruturado** — `--check --json`: formato sempre válido
    (o campo `ok` tem viés de aprovação no modelo padrão de 4B):
 
    ```
-   uvx vision-tool --validate --json "tela.png" "o botão está visível"
+   uvx vision-tool --check --json "tela.png" "o botão está visível"
    # → {"ok": true, "divergencias": []}
    ```
 
-2. **Pergunta aberta** — sem `--validate`. Resposta em texto livre
+4. **Pergunta aberta** — sem flags de checagem. Resposta em texto livre
    (descrição da tela, extrair textos, listar erros visíveis):
 
    ```
@@ -52,19 +61,17 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
 - Primeira execução pode demorar (download do modelo); depois, segundos.
 - O processo encerra e libera a memória ao final (use `--timeout 300` como rede
   de segurança em execuções longas).
-- Códigos de saída: com `--validate`, `0`=Sim e `3`=Não; demais: `127`
+- Códigos de saída: com `--check-code`, `0`=Sim e `3`=Não; demais: `127`
   binário não encontrado, `124` timeout.
-- O campo `ok` do JSON tem viés de aprovação no modelo padrão (4B); para
-  validação confiável prefira o modo texto `Sim`/`Não`.
 
 ## Exemplos de uso (fluxo de alteração de interface)
 
 ```
-# validar mudança específica
-uvx vision-tool --validate "apos.png" "o menu tem os itens File, Edit, Selection, View e Run"
+# validar mudança específica (silencioso, veredito no exit code)
+uvx vision-tool --check-code "apos.png" "o menu tem os itens File, Edit, Selection, View e Run"
 
 # conferir regressão antes/depois
-uvx vision-tool --validate "antes.png,depois.png" "as duas telas mostram o mesmo layout"
+uvx vision-tool --check-code "antes.png,depois.png" "as duas telas mostram o mesmo layout"
 
 # extrair estado da tela para decidir o próximo passo
 uvx vision-tool "tela.png" "Há algum erro ou aviso visível? Liste-os"

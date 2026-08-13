@@ -96,17 +96,27 @@ Chat interativo (sem argumentos):
 uvx vision-tool
 ```
 
-## Modo validação (`--validate`)
+## Modo checagem (`--check` e `--check-code`)
 
 Transforma as condições em perguntas de sim/não — o formato que, nos testes,
-fez o modelo verificar de verdade em vez de aprovar tudo:
+fez o modelo verificar de verdade em vez de aprovar tudo. A gramática GBNF
+restringe a resposta a exatamente `Sim` ou `Não`.
+
+Com texto (`--check`):
 
 ```bash
-uvx vision-tool --validate ui.png "o arquivo aberto na aba é geometry.odin"
+uvx vision-tool --check ui.png "o arquivo aberto na aba é geometry.odin"
 # → Sim
 
-uvx vision-tool --validate ui.png "o arquivo aberto na aba é main.rs"
+uvx vision-tool --check ui.png "o arquivo aberto na aba é main.rs"
 # → Não
+```
+
+Silencioso, com veredito no código de saída (`--check-code`):
+
+```bash
+uvx vision-tool --check-code ui.png "o botão Salvar está visível"
+echo $?   # 0 = Sim, 3 = Não
 ```
 
 Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
@@ -115,14 +125,9 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
    funciona; "o botão não está visível / está oculto" confunde o modelo
 2. Uma condição falsa faz a resposta ser "Não" (vale para listas de condições)
 3. `--json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
-   tem viés de aprovar tudo — prefira o modo texto; o JSON fica confiável em
-   modelos maiores (ex.: Qwen2.5-VL 7B)
-4. A resposta é restringida por **gramática GBNF**: no `--validate` a saída é
-   exatamente `Sim` ou `Não` (sem texto extra); no `--json` o formato é sempre
-   JSON válido
-5. O `--validate` devolve o veredito **apenas no código de saída** (saída
-   silenciosa; `-v` imprime o texto e os logs):
-   `0` = Sim, `3` = Não (os demais: `127` binário ausente, `124` timeout)
+   tem viés de aprovar tudo — prefira os modos texto/código; o JSON fica
+   confiável em modelos maiores (ex.: Qwen2.5-VL 7B)
+4. `-v` mostra o texto gerado e os logs do llama.cpp (útil para depurar)
 
 ## Opções
 
@@ -130,8 +135,9 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 |---|---|
 | `image` | Imagem PNG/JPG ou lista separada por vírgula (posicional) |
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
-| `--validate` | Modo validação: **sem saída**, veredito no exit code (0=Sim, 3=Não) |
-| `--json` | Com `--validate`: resposta JSON (modelos maiores) |
+| `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
+| `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 3=Não) |
+| `--json` | Com `--check`: resposta JSON (modelos maiores) |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |

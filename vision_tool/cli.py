@@ -127,19 +127,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="Projetor multimodal .gguf (apenas com -m; padrão: env VISION_MMPROJ)",
     )
     parser.add_argument(
-        "--validate",
+        "--check",
         action="store_true",
-        help="Modo validação: responde 'Sim' ou 'Não' e devolve exit 0/3",
+        help="Checagem sim/não: imprime 'Sim' ou 'Não' (gramática restringe)",
+    )
+    parser.add_argument(
+        "--check-code",
+        action="store_true",
+        help="Checagem silenciosa: veredito só no exit code (0=Sim, 3=Não)",
+    )
+    parser.add_argument(
+        "--validate",
+        dest="check_code",
+        action="store_true",
+        help=argparse.SUPPRESS,  # apelido antigo de --check-code
     )
     parser.add_argument(
         "--grammar",
         metavar="ARQUIVO",
-        help="Gramática GBNF alternativa (--validate já usa validate.gbnf por padrão)",
+        help="Gramática GBNF alternativa (--check já usa validate.gbnf por padrão)",
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help='Com --validate: resposta em JSON {"ok": ..., "divergencias": [...]}',
+        help='Com --check: resposta em JSON {"ok": ..., "divergencias": [...]}',
     )
     parser.add_argument(
         "--ctx",
@@ -229,20 +240,26 @@ def main(argv: list[str] | None = None) -> int:
         repo = args.hf_repo or os.environ.get("VISION_HF_REPO") or DEFAULT_HF_REPO
         cmd = [binary, "-hf", repo]
 
-    if args.json and not args.validate:
-        parser.error("--json exige --validate")
+    if args.check and args.check_code:
+        parser.error("--check e --check-code são exclusivos")
+    if args.json and not args.check:
+        parser.error("--json exige --check")
+    if args.json and args.check_code:
+        parser.error("--json não combina com --check-code")
+
+    check_mode = args.check or args.check_code
 
     prompt = args.prompt
-    if prompt and args.validate:
+    if prompt and check_mode:
         template = VALIDATE_JSON_TEMPLATE if args.json else VALIDATE_TEMPLATE
         prompt = template.format(prompt=prompt)
 
     if args.image:
         cmd += ["--image", args.image]
 
-    # Gramática: explícita (arquivo) > automática do --validate/--json.
+    # Gramática: explícita (arquivo) > automática do --check/--json.
     grammar_file = args.grammar
-    if not grammar_file and args.validate:
+    if not grammar_file and check_mode:
         cmd += ["--grammar", GRAMMAR_VALIDATE_JSON if args.json else GRAMMAR_VALIDATE]
     elif grammar_file:
         cmd += ["--grammar-file", grammar_file]
@@ -263,8 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         print("+", " ".join(cmd), file=sys.stderr)
 
     try:
-        if args.validate and not args.json:
-            # Modo validação: o veredito (Sim/Não, garantido pela gramática)
+        if args.check_code and not args.json:
+            # --check-code: veredito (Sim/Não, garantido pela gramática)
             # vira código de saída — 0 = Sim, 3 = Não. Sem saída por padrão;
             # -v imprime tudo e falhas inesperadas mostram o diagnóstico.
             proc = subprocess.run(
@@ -280,6 +297,17 @@ def main(argv: list[str] | None = None) -> int:
                 return 0
             if verdict in ("não", "nao"):
                 return 3
+            return proc.returncode
+        if args.check and not args.json:
+            # --check: imprime o veredito em texto; exit code normal do processo.
+            proc = subprocess.run(
+                cmd, check=False, timeout=args.timeout,
+                capture_output=True, text=True, preexec_fn=_preexec(),
+            )
+            if proc.stdout:
+                print(proc.stdout, end="")
+            if proc.stderr and (args.verbose or proc.returncode != 0):
+                print(proc.stderr, file=sys.stderr, end="")
             return proc.returncode
         if args.json:
             proc = subprocess.run(
