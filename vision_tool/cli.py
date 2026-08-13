@@ -482,10 +482,12 @@ def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
         return text
     kept, dropped = [], 0
     seen_boxes: set[tuple] = set()
-    # O modelo escala os dois eixos pela ALTURA (achado empírico com grade de
-    # calibração): em imagens não quadradas o x vem comprimido por
-    # altura/largura. Corrigimos multiplicando x por largura/altura.
-    x_scale = width / height if dims and height else 1.0
+    # Convenção interna do modelo (Qwen-VL): coordenadas normalizadas
+    # 0-999 nos DOIS eixos. Convertemos para pixels com divisor 999;
+    # antes só o x era corrigido (y parecia 'em pixels' porque as imagens
+    # de teste tinham altura 1000 — coincidência).
+    x_scale = width / 999.0 if dims and width else 1.0
+    y_scale = height / 999.0 if dims and height else 1.0
     for item in items:
         bbox = item.get("bbox") if isinstance(item, dict) else None
         label = item.get("label") if isinstance(item, dict) else None
@@ -495,6 +497,7 @@ def _filter_bboxes(text: str, dims: tuple[int, int] | None = None) -> str:
         ):
             x1, y1, x2, y2 = (float(v) for v in bbox)
             x1, x2 = x1 * x_scale, x2 * x_scale
+            y1, y2 = y1 * y_scale, y2 * y_scale
             if isinstance(item, dict):
                 item["bbox"] = [round(x1), round(y1), round(x2), round(y2)]
             area = max(0.0, x2 - x1) * max(0.0, y2 - y1)
