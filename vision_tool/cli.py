@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--validate",
         action="store_true",
-        help="Modo validação: resposta 'OK' ou apenas as divergências encontradas",
+        help="Modo validação: responde 'Sim' ou 'Não' e devolve exit 0/3",
     )
     parser.add_argument(
         "--grammar",
@@ -140,11 +140,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--json",
         action="store_true",
         help='Com --validate: resposta em JSON {"ok": ..., "divergencias": [...]}',
-    )
-    parser.add_argument(
-        "--exit-code",
-        action="store_true",
-        help="Com --validate: veredito vira código de saída (0=Sim, 3=Não)",
     )
     parser.add_argument(
         "--ctx",
@@ -236,10 +231,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json and not args.validate:
         parser.error("--json exige --validate")
-    if args.exit_code and not args.validate:
-        parser.error("--exit-code exige --validate")
-    if args.exit_code and args.json:
-        parser.error("--exit-code não combina com --json")
 
     prompt = args.prompt
     if prompt and args.validate:
@@ -268,7 +259,9 @@ def main(argv: list[str] | None = None) -> int:
         print("+", " ".join(cmd), file=sys.stderr)
 
     try:
-        if args.exit_code:
+        if args.validate and not args.json:
+            # Modo validação: o veredito (Sim/Não, garantido pela gramática)
+            # vira código de saída — 0 = Sim, 3 = Não. O texto também é impresso.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),
