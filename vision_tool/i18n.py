@@ -32,9 +32,13 @@ STRINGS: dict[str, dict[str, str]] = {
         "bbox": (
             "A imagem tem {dims}px. Responda só com JSON: lista de "
             "objetos {{label, bbox [x1,y1,x2,y2]}}, coordenadas 0-1000 "
-            "(x1,y1 = topo-esquerda, x2,y2 = baixo-direita). Use o MENOR "
-            "retângulo do elemento; proibido [0,0,1000,1000]; se não achar, "
-            "responda []. {prompt}"
+            "(x1,y1 = topo-esquerda, x2,y2 = baixo-direita). Retorne UM "
+            "objeto por elemento — vários elementos, vários objetos. "
+            "Conte da esquerda para a direita, de cima para baixo. Use o "
+            "MENOR retângulo do elemento; proibido [0,0,1000,1000]; se não "
+            "achar, responda []. Exemplo: [{{\"label\":\"item 1\",\"bbox\":"
+            "[0,0,140,250]}},{{\"label\":\"item 2\",\"bbox\":[140,0,280,250]}}]. "
+            "{prompt}"
         ),
         "stdin_empty": (
             "stdin vazio: envie a imagem via pipe "
@@ -103,9 +107,12 @@ STRINGS: dict[str, dict[str, str]] = {
         "bbox": (
             "Image is {dims}px. Answer only with JSON: a list of objects "
             "{{label, bbox [x1,y1,x2,y2]}}, coordinates 0-1000 (x1,y1 = "
-            "top-left, x2,y2 = bottom-right). Use the SMALLEST box of the "
-            "element; never [0,0,1000,1000]; if not found, answer []. "
-            "{prompt}"
+            "top-left, x2,y2 = bottom-right). Return ONE object per element "
+            "— multiple elements, multiple objects. Count left-to-right, "
+            "top-to-bottom. Use the SMALLEST box of the element; never "
+            "[0,0,1000,1000]; if not found, answer []. Example: "
+            "[{{\"label\":\"item 1\",\"bbox\":[0,0,140,250]}},"
+            "{{\"label\":\"item 2\",\"bbox\":[140,0,280,250]}}]. {prompt}"
         ),
         "stdin_empty": (
             "empty stdin: pipe the image "

@@ -101,12 +101,12 @@ number ::= ("-"? ([0-9] | [1-9] [0-9]{0,15})) ("." [0-9]+)? ([eE] [-+]? [0-9] [1
 
 ws ::= | " " | "\n" [ \t]{0,20}'''
 # Espelha grammars/bbox.gbnf (lista de objetos {label, bbox} com coordenadas
-# normalizadas 0-1000).
+# normalizadas 0-1000; label limitado a 40 chars pela gramática).
 GRAMMAR_BBOX = r'''root   ::= array
 array  ::= "[" ws (item (ws "," ws item)*)? ws "]"
-item   ::= "{" ws "\"label\"" ws ":" ws string ws "," ws "\"bbox\"" ws ":" ws coords ws "}"
+item   ::= "{" ws "\"label\"" ws ":" ws label ws "," ws "\"bbox\"" ws ":" ws coords ws "}"
 coords ::= "[" ws coord ws "," ws coord ws "," ws coord ws "," ws coord ws "]"
-string ::= "\"" char* "\""
+label  ::= "\"" char{1,40} "\""
 char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
 coord  ::= [0-9] | [1-9] [0-9] | [1-9] [0-9] [0-9] | "1000"
 ws     ::= [ \t\n]*'''
@@ -447,8 +447,8 @@ def _strip_fences(text: str) -> str:
 
 
 def _filter_bboxes(text: str) -> str:
-    """Remove bboxes que cobrem a imagem (quase) inteira — falha clássica
-    de localização dos modelos pequenos."""
+    """Remove bboxes que cobrem a imagem (quase) inteira e labels que
+    ecoam o prompt — falhas clássicas dos modelos pequenos."""
     import json as _json
     try:
         items = _json.loads(text)
@@ -457,8 +457,10 @@ def _filter_bboxes(text: str) -> str:
     if not isinstance(items, list):
         return text
     kept, dropped = [], 0
+    seen_boxes: set[tuple] = set()
     for item in items:
         bbox = item.get("bbox") if isinstance(item, dict) else None
+        label = item.get("label") if isinstance(item, dict) else None
         if (
             isinstance(bbox, list) and len(bbox) == 4
             and all(isinstance(v, (int, float)) for v in bbox)
@@ -468,10 +470,21 @@ def _filter_bboxes(text: str) -> str:
             if area >= 0.8 * 1000 * 1000:
                 dropped += 1
                 continue
+            key = (round(x1), round(y1), round(x2), round(y2))
+            if key in seen_boxes:
+                dropped += 1
+                continue
+            seen_boxes.add(key)
+        if isinstance(label, str) and (
+            len(label) > 60
+            or any(frag in label.lower() for frag in ("responda", "json", "menor retângulo", "x1,y1"))
+        ):
+            dropped += 1
+            continue
         kept.append(item)
     if dropped:
         print(
-            f"aviso: {dropped} bbox(es) cobrindo a imagem inteira removido(s)",
+            f"aviso: {dropped} item(ns) inválido(s) removido(s) do bbox",
             file=sys.stderr,
         )
     return _json.dumps(kept, ensure_ascii=False)
