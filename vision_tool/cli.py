@@ -593,8 +593,7 @@ def main(argv: list[str] | None = None) -> int:
     elif prompt and args.type == "json":
         prompt = t["type_json"].format(prompt=prompt)
     elif prompt and args.type == "bbox":
-        dims = f"{image_dims[0]}x{image_dims[1]}" if image_dims else "?"
-        prompt = t["bbox"].format(prompt=prompt, dims=dims)
+        prompt = t["bbox"].format(prompt=prompt)
 
     if image:
         cmd += ["--image", image]

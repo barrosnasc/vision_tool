@@ -30,7 +30,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "necessário. {prompt}"
         ),
         "bbox": (
-            "A imagem tem {dims}px (largura x altura). Responda só com JSON: "
+            "Responda só com JSON: "
             "lista de objetos {{label, bbox [x1,y1,x2,y2]}}, com "
             "coordenadas EM PIXELS da imagem (x1,y1 = canto superior "
             "esquerdo, x2,y2 = canto inferior direito, 0 até largura/altura "
@@ -106,7 +106,7 @@ STRINGS: dict[str, dict[str, str]] = {
             "repeat values or generate more content than needed. {prompt}"
         ),
         "bbox": (
-            "The image is {dims}px (width x height). Answer only with JSON: "
+            "Answer only with JSON: "
             "a list of objects {{label, bbox [x1,y1,x2,y2]}}, with "
             "coordinates IN PIXELS of the image (x1,y1 = top-left corner, "
             "x2,y2 = bottom-right corner, 0 up to width/height in px). "
