@@ -7,41 +7,45 @@ para restringir a saída do `llama-mtmd-cli` no vision-tool.
 
 O modo `--validate` pede uma resposta `Sim`/`Não`, mas o modelo pode devolver
 texto extra ("Sim, o botão está visível") ou aprovar tudo (viés de
-concordância). Uma gramática **força a resposta a ser exatamente `Sim` ou
+concordância). A gramática **força a resposta a ser exatamente `Sim` ou
 `Não`** no nível dos tokens — o modelo escolhe entre as duas opções, mas não
 consegue gerar mais nada.
 
-## Exemplo: `validate.gbnf`
+## Arquivos
 
-```gbnf
-root ::= "Sim" | "Não"
-```
+| Arquivo | Restringe a | Usado em |
+|---|---|---|
+| [`validate.gbnf`](validate.gbnf) | `Sim` \| `Não` | `--validate` (automático) |
+| [`validate-json.gbnf`](validate-json.gbnf) | objeto JSON `{"ok", "divergencias"}` | `--validate --json` (automático) |
 
-Uso manual (sem o vision-tool):
+Os arquivos são a fonte canônica; o CLI embute cópias idênticas (strings raw
+em `vision_tool/cli.py`) para funcionar quando instalado via `uv tool install`.
+
+## Uso manual (sem o vision-tool)
 
 ```bash
 llama-mtmd-cli \
   -hf ggml-org/gemma-3-4b-it-GGUF \
   --image tela.png \
   --grammar-file grammars/validate.gbnf \
-  -p "Analise a imagem. É verdade que o botão Salvar está visível?"
+  -p "É verdade que o botão Salvar está visível?"
 # → Sim
 ```
 
-## Gramáticas previstas
+## Resultados dos testes (Gemma 3 4B)
 
-| Arquivo | Restringe a |
-|---|---|
-| `validate.gbnf` | `Sim` ou `Não` (modo `--validate`) |
-| `validate-json.gbnf` | objeto JSON `{"ok": ..., "divergencias": [...]}` (modo `--json`) |
+| Caso | Sem gramática | Com gramática |
+|---|---|---|
+| Condição verdadeira | "Sim" ✅ | "Sim" ✅ (exato) |
+| Condição falsa (`main.rs` inexistente) | "Não" ✅ | "Não" ✅ (exato) |
+| Texto extra na resposta | frequente | **impossível** |
+| JSON válido (`--json`) | às vezes code fence | **sempre** (formatado) |
+| Campo `ok` do JSON em condição falsa | `ok: true` ❌ | `ok: true` ❌ (limite do modelo) |
 
-## Próximos passos
-
-1. Criar os arquivos `.gbnf` desta pasta
-2. Testar manualmente com `--grammar-file` e medir o ganho de acerto
-3. Integrar no vision-tool: flag `--grammar <arquivo>` (e, se o ganho for
-   confirmado, gramática automática no `--validate`)
-4. Atualizar `AGENT_COMMAND.md` e `README.md` com o novo comportamento
+**Limite conhecido:** a gramática trava o *formato*, não o *raciocínio*. No
+JSON, o campo `ok` continua com viés de aprovação no modelo de 4B — para
+validação confiável use o modo texto (`--validate` sem `--json`); o JSON fica
+confiável em modelos maiores (ex.: Qwen2.5-VL 7B).
 
 ## Referências
 

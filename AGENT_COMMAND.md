@@ -28,6 +28,7 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
    Regras:
    - Uma condição falsa ⇒ resposta `Não`
    - Evite negações ("não está", "oculto") — confundem o modelo
+   - A resposta é restringida por gramática: saída exata `Sim` ou `Não`
 
 2. **Pergunta aberta** — sem `--validate`. Resposta em texto livre
    (descrição da tela, extrair textos, listar erros visíveis):

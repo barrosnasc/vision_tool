@@ -31,6 +31,19 @@ DEFAULT_NGL = 99  # GPU (CUDA) como padrão; build CPU ignora com aviso
 # de ~2,5 GB (128k) para ~160 MB. Use --ctx 0 para voltar ao padrão do modelo.
 DEFAULT_CTX = 8192
 
+# Gramáticas GBNF (fonte canônica: grammars/*.gbnf neste repositório).
+# Restringem a saída no nível dos tokens: o modelo escolhe entre as opções
+# permitidas, mas não consegue gerar texto extra nem aprovar tudo.
+GRAMMAR_VALIDATE = 'root ::= "Sim" | "Não"'
+# Espelha grammars/validate-json.gbnf byte a byte (string raw, sem escapes).
+GRAMMAR_VALIDATE_JSON = r'''root   ::= object
+object ::= "{" ws "\"ok\"" ws ":" ws boolean ws "," ws "\"divergencias\"" ws ":" ws array ws "}"
+array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
+string ::= "\"" char* "\""
+char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+boolean ::= "true" | "false"
+ws     ::= [ \t\n]*'''
+
 # Templates do modo --validate.
 # Achado empírico: no formato de AFIRMAÇÃO o modelo aprova tudo (viés de
 # concordância); no formato de PERGUNTA ele verifica de verdade. Por isso
@@ -41,9 +54,10 @@ VALIDATE_TEMPLATE = (
     "É verdade que {prompt}?"
 )
 VALIDATE_JSON_TEMPLATE = (
-    "Analise a imagem com atenção. Responda apenas com JSON no formato "
-    '{{"ok": true|false, "divergencias": ["..."]}} à pergunta: é verdade '
-    "que {prompt}?"
+    "Analise a imagem com atenção. Responda apenas com JSON à pergunta: "
+    'é verdade que {prompt}? Regras: use "ok": true apenas se a condição '
+    'for verdadeira na imagem; se for falsa, use "ok": false e liste o '
+    'motivo em "divergencias".'
 )
 
 # Caminhos comuns do binário além do PATH (último caso).
@@ -116,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--validate",
         action="store_true",
         help="Modo validação: resposta 'OK' ou apenas as divergências encontradas",
+    )
+    parser.add_argument(
+        "--grammar",
+        metavar="ARQUIVO",
+        help="Gramática GBNF alternativa (--validate já usa validate.gbnf por padrão)",
     )
     parser.add_argument(
         "--json",
@@ -209,6 +228,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.image:
         cmd += ["--image", args.image]
+
+    # Gramática: explícita (arquivo) > automática do --validate/--json.
+    grammar_file = args.grammar
+    if not grammar_file and args.validate:
+        cmd += ["--grammar", GRAMMAR_VALIDATE_JSON if args.json else GRAMMAR_VALIDATE]
+    elif grammar_file:
+        cmd += ["--grammar-file", grammar_file]
 
     if args.ctx > 0:
         cmd += ["-c", str(args.ctx)]

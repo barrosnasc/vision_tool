@@ -117,6 +117,9 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 3. `--json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
    tem viés de aprovar tudo — prefira o modo texto; o JSON fica confiável em
    modelos maiores (ex.: Qwen2.5-VL 7B)
+4. A resposta é restringida por **gramática GBNF**: no `--validate` a saída é
+   exatamente `Sim` ou `Não` (sem texto extra); no `--json` o formato é sempre
+   JSON válido
 
 ## Opções
 
