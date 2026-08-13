@@ -44,7 +44,7 @@ char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] 
 boolean ::= "true" | "false"
 ws     ::= [ \t\n]*'''
 
-# Templates do modo --validate.
+# Templates dos modos --check/--check-code.
 # Achado empírico: no formato de AFIRMAÇÃO o modelo aprova tudo (viés de
 # concordância); no formato de PERGUNTA ele verifica de verdade. Por isso
 # cada condição vira uma pergunta de sim/não.

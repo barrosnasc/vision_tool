@@ -74,7 +74,7 @@ uvx --from git+https://github.com/barrosnasc/vision_tool vision-tool ui.png "pro
 Validação simples:
 
 ```bash
-uvx vision-tool --validate ui.png "o botão Salvar está visível e o título é Configurações"
+uvx vision-tool --check ui.png "o botão Salvar está visível e o título é Configurações"
 # → Sim
 ```
 
