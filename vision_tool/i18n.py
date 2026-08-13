@@ -30,17 +30,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "necessário. {prompt}"
         ),
         "bbox": (
-            "Analise a imagem com atenção. A imagem tem {dims} pixels "
-            "(largura x altura) — use essa proporção para estimar o tamanho "
-            "real dos elementos. Responda apenas com JSON: uma "
-            "lista de objetos, cada um com \"label\" (o que é o elemento) e "
-            "\"bbox\" (lista [x1, y1, x2, y2] com coordenadas normalizadas "
-            "de 0 a 1000 — x1,y1 canto superior esquerdo, x2,y2 canto "
-            "inferior direito). Regras: o bbox deve ser o MENOR retângulo "
-            "que contém apenas o elemento pedido; nunca use [0,0,1000,1000] "
-            "nem caixas que cubram a imagem inteira; se o elemento não "
-            "existir, responda com a lista vazia []. Inclua apenas os "
-            "elementos pedidos. {prompt}"
+            "A imagem tem {dims}px. Responda só com JSON: lista de "
+            "objetos {{label, bbox [x1,y1,x2,y2]}}, coordenadas 0-1000 "
+            "(x1,y1 = topo-esquerda, x2,y2 = baixo-direita). Use o MENOR "
+            "retângulo do elemento; proibido [0,0,1000,1000]; se não achar, "
+            "responda []. {prompt}"
         ),
         "stdin_empty": (
             "stdin vazio: envie a imagem via pipe "
@@ -107,17 +101,11 @@ STRINGS: dict[str, dict[str, str]] = {
             "repeat values or generate more content than needed. {prompt}"
         ),
         "bbox": (
-            "Look at the image carefully. The image is {dims} pixels "
-            "(width x height) — use that ratio to estimate the actual size "
-            "of the elements. Answer only with JSON: a list of "
-            "objects, each with \"label\" (what the element is) and \"bbox\" "
-            "(a [x1, y1, x2, y2] list with coordinates normalized from 0 to "
-            "1000 — x1,y1 top-left corner, x2,y2 bottom-right corner). "
-            "Rules: the bbox must be the SMALLEST rectangle containing only "
-            "the requested element; never use [0,0,1000,1000] or boxes "
-            "covering the whole image; if the element does not exist, "
-            "answer with the empty list []. Include only the requested "
-            "elements. {prompt}"
+            "Image is {dims}px. Answer only with JSON: a list of objects "
+            "{{label, bbox [x1,y1,x2,y2]}}, coordinates 0-1000 (x1,y1 = "
+            "top-left, x2,y2 = bottom-right). Use the SMALLEST box of the "
+            "element; never [0,0,1000,1000]; if not found, answer []. "
+            "{prompt}"
         ),
         "stdin_empty": (
             "empty stdin: pipe the image "
