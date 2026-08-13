@@ -148,6 +148,51 @@ def _find_binary(explicit: str | None) -> str:
     return "llama-mtmd-cli"
 
 
+def build_bbox_command(
+    image: str,
+    prompt: str,
+    *,
+    binary: str | None = None,
+    model: str | None = None,
+    mmproj: str | None = None,
+    hf_repo: str | None = None,
+    ctx: int = DEFAULT_CTX,
+    ngl: int = DEFAULT_NGL,
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    verbose: bool = False,
+) -> list[str]:
+    """Comando llama-mtmd-cli do fluxo `--type bbox` (gramática inclusa).
+
+    API pública para extensões (vision-tool-gui): espelha o ramo bbox de
+    main() — binário, modelo padrão, contexto, NGL e gramática resolvidos
+    como na CLI. O `prompt` deve chegar já formatado pelo template `bbox`
+    do idioma (vision_tool.i18n).
+    """
+    cmd_bin = _find_binary(binary)
+    model = model or os.environ.get("VISION_MODEL")
+    mmproj = mmproj or os.environ.get("VISION_MMPROJ")
+    if model:
+        cmd = [cmd_bin, "-m", model]
+        if mmproj:
+            cmd += ["--mmproj", mmproj]
+    else:
+        repo = (
+            hf_repo
+            or os.environ.get("VISION_HF_REPO")
+            or _LOCAL_HF_REPO
+            or DEFAULT_HF_REPO
+        )
+        cmd = [cmd_bin, "-hf", repo]
+    cmd += ["--image", image]
+    cmd += ["--grammar", GRAMMAR_BBOX]
+    if ctx > 0:
+        cmd += ["-c", str(ctx)]
+    if not verbose:
+        cmd += ["-lv", "0"]
+    cmd += ["-ngl", str(ngl), "-n", str(max_tokens), "-p", prompt]
+    return cmd
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="vision-tool",
