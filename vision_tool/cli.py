@@ -35,6 +35,32 @@ from vision_tool.i18n import resolve_lang
 DEFAULT_HF_REPO = "ggml-org/gemma-3-4b-it-GGUF"
 DEFAULT_MAX_TOKENS = 512
 DEFAULT_NGL = 99  # GPU (CUDA) como padrão; build CPU ignora com aviso
+
+
+def _load_local_config():
+    """Carrega sobrescritas locais (fora do pacote, não versionadas).
+
+    Procura ~/.config/vision-tool/local_config.py — arquivo do usuário com
+    DEFAULT_HF_REPO e/ou DEFAULT_NGL. Nunca vai para o GitHub nem para o
+    pacote instalado.
+    """
+    import importlib.util
+    for path in (
+        os.path.expanduser("~/.config/vision-tool/local_config.py"),
+    ):
+        if os.path.isfile(path):
+            spec = importlib.util.spec_from_file_location("vision_tool_local", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    return None
+
+
+_LOCAL_CFG = _load_local_config()
+_LOCAL_HF_REPO = getattr(_LOCAL_CFG, "DEFAULT_HF_REPO", None)
+_LOCAL_NGL = getattr(_LOCAL_CFG, "DEFAULT_NGL", None)
+if _LOCAL_NGL is not None:
+    DEFAULT_NGL = _LOCAL_NGL
 # Contexto: Gemma 3 4B suporta 128k, mas cada imagem = 256 tokens e a
 # validação usa <1.5k no pior caso. 8k dá folga de ~6x e reduz a KV cache
 # de ~2,5 GB (128k) para ~160 MB. Use --ctx 0 para voltar ao padrão do modelo.
@@ -384,14 +410,10 @@ def main(argv: list[str] | None = None) -> int:
         if mmproj:
             cmd += ["--mmproj", mmproj]
     else:
-        try:
-            from vision_tool.local_config import DEFAULT_HF_REPO as _LOCAL_REPO
-        except ImportError:
-            _LOCAL_REPO = None
         repo = (
             args.hf_repo
             or os.environ.get("VISION_HF_REPO")
-            or _LOCAL_REPO
+            or _LOCAL_HF_REPO
             or DEFAULT_HF_REPO
         )
         cmd = [binary, "-hf", repo]
