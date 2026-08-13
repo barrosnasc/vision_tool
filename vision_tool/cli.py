@@ -201,6 +201,37 @@ def build_parser() -> argparse.ArgumentParser:
 _MAX_PIXELS = 15_000_000
 
 
+def _sniff_type(data: bytes) -> str:
+    """Identifica o tipo real do conteúdo (magic numbers) para diagnóstico."""
+    if data.startswith(b"\x89PNG"):
+        return "PNG (decodificação falhou)"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "JPEG (decodificação falhou)"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "WebP (Pillow sem suporte a webp?)"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "GIF"
+    if data[:2] == b"BM":
+        return "BMP"
+    if data[:4] == b"%PDF":
+        return "PDF (não é imagem raster)"
+    if data[:2] == b"PK":
+        return "ZIP/Office"
+    if data[4:12] in (b"ftypavif", b"ftypavis"):
+        return "AVIF (não suportado)"
+    if data[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
+        return "HEIC/HEIF (não suportado)"
+    if data.lstrip().startswith((b"<svg", b"<?xml", b"<html", b"<!DOCTYPE")):
+        return "SVG/XML/HTML (vetorial — o modelo só aceita imagem raster)"
+    try:
+        sample = data[:200].decode("utf-8")
+        if all(ch.isprintable() or ch in "\n\r\t" for ch in sample):
+            return f"texto (começa com: {sample[:60]!r})"
+    except UnicodeDecodeError:
+        pass
+    return "formato desconhecido"
+
+
 def _normalize_image(data: bytes) -> str:
     """Decodifica bytes de imagem (qualquer formato do Pillow), converte para
     PNG, reduz se for grande demais e devolve o caminho do arquivo temporário."""
@@ -209,8 +240,9 @@ def _normalize_image(data: bytes) -> str:
         img.load()
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError(
-            "o conteúdo não é uma imagem decodificável — o clipboard pode ter "
-            "entregado texto ou um formato sem suporte"
+            "o conteúdo do stdin não é uma imagem decodificável — detectado: "
+            f"{_sniff_type(data)}. Dica: tente 'wl-paste --type image/png' "
+            "ou copie a imagem novamente."
         ) from exc
 
     if img.mode not in ("RGB", "RGBA", "L"):
