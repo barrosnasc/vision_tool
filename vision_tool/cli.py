@@ -111,26 +111,63 @@ def build_parser() -> argparse.ArgumentParser:
             "execução do llama-mtmd-cli. O modelo é descarregado da memória ao "
             "final do processo."
         ),
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        epilog=(
+            "exemplos:\n"
+            "  vision-tool tela.png \"descreva a interface\"\n"
+            "  vision-tool --check-code tela.png \"o botão Salvar está visível\"\n"
+            "  vision-tool --json tela.png \"liste os itens do menu\"\n"
+            "  cat tela.png | vision-tool - \"o que mudou?\"\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument(
+    entrada = parser.add_argument_group("entrada")
+    entrada.add_argument(
         "image",
         nargs="?",
-        help="Imagem PNG/JPG ou lista separada por vírgula; '-' lê do stdin (pipe); "
-             "omitia para chat interativo",
+        help="Imagem ou lista separada por vírgula; '-' lê do stdin (pipe); "
+             "omita para chat interativo",
     )
-    parser.add_argument(
+    entrada.add_argument(
         "prompt",
         nargs="?",
-        help="Descrição/resposta esperada sobre a imagem; omita para chat interativo",
+        help="Descrição ou pergunta sobre a imagem; omita para chat interativo",
     )
 
+    modos = parser.add_argument_group("modos de resposta (escolha no máximo um)")
+    modos.add_argument(
+        "--check",
+        action="store_true",
+        help="Sim/Não em texto (gramática restringe a resposta)",
+    )
+    modos.add_argument(
+        "--check-code",
+        action="store_true",
+        help="Silencioso: veredito só no exit code (0=Sim, 1=Não)",
+    )
+    modos.add_argument(
+        "--check-json",
+        action="store_true",
+        help='Veredito em JSON: {"ok": ..., "divergencias": [...]}',
+    )
+    modos.add_argument(
+        "--json",
+        action="store_true",
+        help="Lista JSON de strings (extração de itens da tela)",
+    )
     parser.add_argument(
+        "--validate",
+        dest="check_code",
+        action="store_true",
+        help=argparse.SUPPRESS,  # apelido antigo de --check-code
+    )
+
+    modelo = parser.add_argument_group("modelo")
+    modelo.add_argument(
         "-m", "--model",
         help="GGUF local alternativo (padrão: env VISION_MODEL ou o modelo padrão)",
     )
-    parser.add_argument(
+    modelo.add_argument(
         "--hf",
         dest="hf_repo",
         metavar="REPO",
@@ -139,76 +176,54 @@ def build_parser() -> argparse.ArgumentParser:
             f"{DEFAULT_HF_REPO})"
         ),
     )
-    parser.add_argument(
+    modelo.add_argument(
         "--mmproj",
         help="Projetor multimodal .gguf (apenas com -m; padrão: env VISION_MMPROJ)",
     )
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="Checagem sim/não: imprime 'Sim' ou 'Não' (gramática restringe)",
-    )
-    parser.add_argument(
-        "--check-code",
-        action="store_true",
-        help="Checagem silenciosa: veredito só no exit code (0=Sim, 1=Não)",
-    )
-    parser.add_argument(
-        "--check-json",
-        action="store_true",
-        help='Com --check: veredito em JSON {"ok": ..., "divergencias": [...]}',
-    )
-    parser.add_argument(
-        "--validate",
-        dest="check_code",
-        action="store_true",
-        help=argparse.SUPPRESS,  # apelido antigo de --check-code
-    )
-    parser.add_argument(
+
+    infer = parser.add_argument_group("inferência")
+    infer.add_argument(
         "--grammar",
         metavar="ARQUIVO",
-        help="Gramática GBNF alternativa (--check já usa validate.gbnf por padrão)",
+        help="Gramática GBNF alternativa (os modos já têm gramática própria)",
     )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="Modo lista: responde com lista JSON de strings (independente do check)",
-    )
-    parser.add_argument(
+    infer.add_argument(
         "--ctx",
         type=int,
         default=DEFAULT_CTX,
         help="Tamanho do contexto em tokens (0 = padrão do modelo, 128k)",
     )
-    parser.add_argument(
+    infer.add_argument(
         "-n", "--max-tokens",
         type=int,
         default=DEFAULT_MAX_TOKENS,
         help="Máximo de tokens a gerar",
     )
-    parser.add_argument(
+    infer.add_argument(
         "--ngl",
         type=int,
         default=DEFAULT_NGL,
         help="Camadas na GPU (padrão: 99 = tudo; use 0 para forçar CPU)",
     )
-    parser.add_argument(
+    infer.add_argument(
         "--timeout",
         type=float,
         default=None,
         metavar="SEGUNDOS",
         help="Mata o processo após N segundos (garante liberação de memória)",
     )
-    parser.add_argument(
+
+    dep = parser.add_argument_group("depuração")
+    dep.add_argument(
         "--bin",
         dest="binary",
         metavar="CAMINHO",
         help="Caminho do llama-mtmd-cli (padrão: env LLAMA_MTMD_CLI ou PATH)",
     )
-    parser.add_argument(
+    dep.add_argument(
         "-v", "--verbose",
         action="store_true",
-        help="Mostra o comando executado no stderr",
+        help="Mostra o comando, o texto gerado e os logs do llama.cpp",
     )
     return parser
 
@@ -356,17 +371,17 @@ def main(argv: list[str] | None = None) -> int:
         repo = args.hf_repo or os.environ.get("VISION_HF_REPO") or DEFAULT_HF_REPO
         cmd = [binary, "-hf", repo]
 
-    if args.check and args.check_code:
-        parser.error("--check e --check-code são exclusivos")
-    if args.json and (args.check or args.check_code):
-        parser.error(
-            "--json (lista) não combina com --check/--check-code — "
-            "use --check-json para o veredito em JSON"
-        )
-    if args.check_json and not args.check:
-        parser.error("--check-json exige --check")
+    modes = {
+        "--check": args.check,
+        "--check-code": args.check_code,
+        "--check-json": args.check_json,
+        "--json": args.json,
+    }
+    active = [name for name, on in modes.items() if on]
+    if len(active) > 1:
+        parser.error(f"escolha apenas um modo de resposta por vez ({', '.join(active)})")
 
-    check_mode = args.check or args.check_code
+    check_mode = args.check or args.check_code or args.check_json
     check_json = args.check_json
 
     tmp_image = None
@@ -434,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
             if verdict in ("não", "nao"):
                 return 1  # falso, como test/grep/diff (>=2 fica para erros)
             return proc.returncode
-        if args.check and not check_json:
+        if args.check:
             # --check: imprime o veredito em texto; exit code normal do processo.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
