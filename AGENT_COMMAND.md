@@ -36,12 +36,12 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
    # → "Sim", exit 0
    ```
 
-3. **JSON estruturado** — `--validate --json [--jq FILTRO]`: formato sempre
-   válido; `--jq` extrai campos como o jq faz:
+3. **JSON estruturado** — `--validate --json`: formato sempre válido
+   (o campo `ok` tem viés de aprovação no modelo padrão de 4B):
 
    ```
-   uvx vision-tool --validate --json --jq '.ok' "tela.png" "o botão está visível"
-   # → true
+   uvx vision-tool --validate --json "tela.png" "o botão está visível"
+   # → {"ok": true, "divergencias": []}
    ```
 
 2. **Pergunta aberta** — sem `--validate`. Resposta em texto livre

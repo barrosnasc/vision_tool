@@ -142,12 +142,6 @@ def build_parser() -> argparse.ArgumentParser:
         help='Com --validate: resposta em JSON {"ok": ..., "divergencias": [...]}',
     )
     parser.add_argument(
-        "--jq",
-        metavar="FILTRO",
-        help="Aplica um filtro jq na saída JSON (ex.: '.ok', '.divergencias[0]'). "
-             "Saída raw, como jq -r",
-    )
-    parser.add_argument(
         "--exit-code",
         action="store_true",
         help="Com --validate: veredito vira código de saída (0=Sim, 3=Não)",
@@ -221,24 +215,6 @@ def _strip_fences(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _run_jq(text: str, filter_: str) -> str | None:
-    """Aplica um filtro jq à saída JSON (saída raw, como jq -r).
-
-    Devolve None se o jq não existir ou o texto não for JSON válido —
-    nesse caso o chamador mantém a saída original.
-    """
-    try:
-        proc = subprocess.run(
-            ["jq", "-r", filter_],
-            input=text, capture_output=True, text=True, timeout=30,
-        )
-        if proc.returncode == 0:
-            return proc.stdout.rstrip("\n")
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -260,8 +236,6 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.json and not args.validate:
         parser.error("--json exige --validate")
-    if args.jq and not args.json:
-        parser.error("--jq exige --json")
     if args.exit_code and not args.validate:
         parser.error("--exit-code exige --validate")
     if args.exit_code and args.json:
@@ -316,8 +290,6 @@ def main(argv: list[str] | None = None) -> int:
             )
             if proc.stdout:
                 out = _strip_fences(proc.stdout)
-                if args.jq:
-                    out = _run_jq(out, args.jq) or out
                 print(out)
             if proc.stderr:
                 print(proc.stderr, file=sys.stderr, end="")
