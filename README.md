@@ -120,6 +120,10 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 4. A resposta é restringida por **gramática GBNF**: no `--validate` a saída é
    exatamente `Sim` ou `Não` (sem texto extra); no `--json` o formato é sempre
    JSON válido
+5. `--jq` aplica um filtro jq à saída JSON:
+   `uvx vision-tool --validate --json --jq '.ok' tela.png "..."` → `true`
+6. `--exit-code` transforma o veredito em código de saída — sem parsear texto:
+   `0` = Sim, `3` = Não (os demais: `127` binário ausente, `124` timeout)
 
 ## Opções
 
@@ -129,6 +133,8 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
 | `--validate` | Modo validação: responde Sim/Não para as condições |
 | `--json` | Com `--validate`: resposta JSON (modelos maiores) |
+| `--jq FILTRO` | Filtro jq na saída JSON (ex.: `.ok`, `.divergencias[0]`) |
+| `--exit-code` | Com `--validate`: veredito vira código de saída (0=Sim, 3=Não) |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |

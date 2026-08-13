@@ -29,6 +29,20 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
    - Uma condição falsa ⇒ resposta `Não`
    - Evite negações ("não está", "oculto") — confundem o modelo
    - A resposta é restringida por gramática: saída exata `Sim` ou `Não`
+   - Com `--exit-code`, o veredito vira código de saída (0=Sim, 3=Não):
+
+   ```
+   uvx vision-tool --validate --exit-code "tela.png" "o botão está visível"
+   # → "Sim", exit 0
+   ```
+
+3. **JSON estruturado** — `--validate --json [--jq FILTRO]`: formato sempre
+   válido; `--jq` extrai campos como o jq faz:
+
+   ```
+   uvx vision-tool --validate --json --jq '.ok' "tela.png" "o botão está visível"
+   # → true
+   ```
 
 2. **Pergunta aberta** — sem `--validate`. Resposta em texto livre
    (descrição da tela, extrair textos, listar erros visíveis):
@@ -43,6 +57,9 @@ uvx vision-tool [--validate] [--timeout 300] "<imagem.png>" "<condição>"
 - O processo encerra e libera a memória ao final (use `--timeout 300` como rede
   de segurança em execuções longas).
 - Códigos de saída: `0` sucesso, `127` binário não encontrado, `124` timeout.
+  Com `--exit-code`: `0`=Sim, `3`=Não.
+- O campo `ok` do JSON tem viés de aprovação no modelo padrão (4B); para
+  validação confiável prefira o modo texto `Sim`/`Não`.
 
 ## Exemplos de uso (fluxo de alteração de interface)
 
