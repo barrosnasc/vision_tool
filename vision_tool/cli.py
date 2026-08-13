@@ -466,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
         print("+", " ".join(cmd), file=sys.stderr)
 
     try:
-        if args.check_code and not args.json:
+        if args.check_code:
             # --check-code: veredito (Sim/Não, garantido pela gramática)
             # vira código de saída — 0 = Sim, 1 = Não (convenção test/grep;
             # >= 2 reservado para erros). Sem saída por padrão; -v imprime
