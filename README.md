@@ -137,10 +137,20 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 1. **Fraseie as condições na forma positiva** — "o botão está visível"
    funciona; "o botão não está visível / está oculto" confunde o modelo
 2. Uma condição falsa faz a resposta ser "Não" (vale para listas de condições)
-3. `--json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
+3. `--check-json` (`{"ok": ..., "divergencias": [...]}`) existe, mas no modelo de 4B
    tem viés de aprovar tudo — prefira os modos texto/código; o JSON fica
    confiável em modelos maiores (ex.: Qwen2.5-VL 7B)
 4. `-v` mostra o texto gerado e os logs do llama.cpp (útil para depurar)
+
+## Modo lista (`--json`)
+
+Perguntas abertas com resposta **estruturada**: lista JSON de strings, com
+gramática própria — útil para extrair itens da tela:
+
+```bash
+uvx vision-tool --json ui.png "liste os itens do menu de navegação visíveis"
+# → ["Home", "Illustrations", "Manga", "Novels"]
+```
 
 ## Opções
 
@@ -150,7 +160,8 @@ Regras de ouro (descobertas empiricamente com a Gemma 3 4B):
 | `prompt` | Descrição ou pergunta sobre a imagem (posicional) |
 | `--check` | Checagem sim/não: imprime `Sim` ou `Não` |
 | `--check-code` | Checagem silenciosa: veredito no exit code (0=Sim, 1=Não) |
-| `--json` | Com `--check`: resposta JSON (modelos maiores) |
+| `--check-json` | Com `--check`: veredito em JSON `{ok, divergencias}` (modelos maiores) |
+| `--json` | Modo lista: lista JSON de strings (independente do check) |
 | `-m, --model` | GGUF local alternativo (env `VISION_MODEL`) |
 | `--hf REPO` | Repo GGUF alternativo (padrão: `ggml-org/gemma-3-4b-it-GGUF`) |
 | `--mmproj` | Projetor multimodal, apenas com `-m` (env `VISION_MMPROJ`) |

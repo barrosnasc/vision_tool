@@ -41,15 +41,23 @@ uvx vision-tool [--check | --check-code] [--timeout 300] "<imagem.png>" "<condi�
    # → Sim
    ```
 
-3. **JSON estruturado** — `--check --json`: formato sempre válido
+3. **Veredito em JSON** — `--check --check-json`: formato sempre válido
    (o campo `ok` tem viés de aprovação no modelo padrão de 4B):
 
    ```
-   uvx vision-tool --check --json "tela.png" "o botão está visível"
+   uvx vision-tool --check --check-json "tela.png" "o botão está visível"
    # → {"ok": true, "divergencias": []}
    ```
 
-4. **Pergunta aberta** — sem flags de checagem. Resposta em texto livre
+4. **Lista JSON** — `--json`: extrai itens da tela como lista de strings
+   (gramática restringe o formato):
+
+   ```
+   uvx vision-tool --json "tela.png" "liste os itens do menu de navegação"
+   # → ["Home", "Illustrations", "Manga"]
+   ```
+
+5. **Pergunta aberta** — sem flags de checagem. Resposta em texto livre
    (descrição da tela, extrair textos, listar erros visíveis):
 
    ```

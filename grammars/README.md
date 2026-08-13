@@ -15,8 +15,9 @@ consegue gerar mais nada.
 
 | Arquivo | Restringe a | Usado em |
 |---|---|---|
-| [`validate.gbnf`](validate.gbnf) | `Sim` \| `Não` | `--validate` (automático) |
-| [`validate-json.gbnf`](validate-json.gbnf) | objeto JSON `{"ok", "divergencias"}` | `--validate --json` (automático) |
+| [`validate.gbnf`](validate.gbnf) | `Sim` \| `Não` | `--check` / `--check-code` (automático) |
+| [`validate-json.gbnf`](validate-json.gbnf) | objeto JSON `{"ok", "divergencias"}` | `--check --check-json` (automático) |
+| [`list.gbnf`](list.gbnf) | lista JSON de strings | `--json` (automático) |
 
 Os arquivos são a fonte canônica; o CLI embute cópias idênticas (strings raw
 em `vision_tool/cli.py`) para funcionar quando instalado via `uv tool install`.

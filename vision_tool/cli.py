@@ -49,6 +49,12 @@ string ::= "\"" char* "\""
 char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
 boolean ::= "true" | "false"
 ws     ::= [ \t\n]*'''
+# Espelha grammars/list.gbnf byte a byte (lista JSON de strings).
+GRAMMAR_JSON_ARRAY = r'''root   ::= array
+array  ::= "[" ws (string (ws "," ws string)*)? ws "]"
+string ::= "\"" char* "\""
+char   ::= [^"\\] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F] [0-9a-fA-F])
+ws     ::= [ \t\n]*'''
 
 # Templates dos modos --check/--check-code.
 # Achado empírico: no formato de AFIRMAÇÃO o modelo aprova tudo (viés de
@@ -64,6 +70,10 @@ VALIDATE_JSON_TEMPLATE = (
     'é verdade que {prompt}? Regras: use "ok": true apenas se a condição '
     'for verdadeira na imagem; se for falsa, use "ok": false e liste o '
     'motivo em "divergencias".'
+)
+LIST_JSON_TEMPLATE = (
+    "Analise a imagem com atenção. Responda apenas com JSON: uma lista de "
+    "strings, uma por item pedido. {prompt}"
 )
 
 # Caminhos comuns do binário além do PATH (último caso).
@@ -144,6 +154,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Checagem silenciosa: veredito só no exit code (0=Sim, 1=Não)",
     )
     parser.add_argument(
+        "--check-json",
+        action="store_true",
+        help='Com --check: veredito em JSON {"ok": ..., "divergencias": [...]}',
+    )
+    parser.add_argument(
         "--validate",
         dest="check_code",
         action="store_true",
@@ -157,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--json",
         action="store_true",
-        help='Com --check: resposta em JSON {"ok": ..., "divergencias": [...]}',
+        help="Modo lista: responde com lista JSON de strings (independente do check)",
     )
     parser.add_argument(
         "--ctx",
@@ -343,12 +358,16 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.check and args.check_code:
         parser.error("--check e --check-code são exclusivos")
-    if args.json and not args.check:
-        parser.error("--json exige --check")
-    if args.json and args.check_code:
-        parser.error("--json não combina com --check-code")
+    if args.json and (args.check or args.check_code):
+        parser.error(
+            "--json (lista) não combina com --check/--check-code — "
+            "use --check-json para o veredito em JSON"
+        )
+    if args.check_json and not args.check:
+        parser.error("--check-json exige --check")
 
     check_mode = args.check or args.check_code
+    check_json = args.check_json
 
     tmp_image = None
     image = args.image
@@ -359,17 +378,24 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(str(exc))
 
     prompt = args.prompt
-    if prompt and check_mode:
-        template = VALIDATE_JSON_TEMPLATE if args.json else VALIDATE_TEMPLATE
-        prompt = template.format(prompt=prompt)
+    if prompt and check_json:
+        prompt = VALIDATE_JSON_TEMPLATE.format(prompt=prompt)
+    elif prompt and check_mode:
+        prompt = VALIDATE_TEMPLATE.format(prompt=prompt)
+    elif prompt and args.json:
+        prompt = LIST_JSON_TEMPLATE.format(prompt=prompt)
 
     if image:
         cmd += ["--image", image]
 
-    # Gramática: explícita (arquivo) > automática do --check/--json.
+    # Gramática: explícita (arquivo) > automática dos modos.
     grammar_file = args.grammar
-    if not grammar_file and check_mode:
-        cmd += ["--grammar", GRAMMAR_VALIDATE_JSON if args.json else GRAMMAR_VALIDATE]
+    if not grammar_file and check_json:
+        cmd += ["--grammar", GRAMMAR_VALIDATE_JSON]
+    elif not grammar_file and args.json:
+        cmd += ["--grammar", GRAMMAR_JSON_ARRAY]
+    elif not grammar_file and check_mode:
+        cmd += ["--grammar", GRAMMAR_VALIDATE]
     elif grammar_file:
         cmd += ["--grammar-file", grammar_file]
 
@@ -408,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
             if verdict in ("não", "nao"):
                 return 1  # falso, como test/grep/diff (>=2 fica para erros)
             return proc.returncode
-        if args.check and not args.json:
+        if args.check and not check_json:
             # --check: imprime o veredito em texto; exit code normal do processo.
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
@@ -419,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
             if proc.stderr and (args.verbose or proc.returncode != 0):
                 print(proc.stderr, file=sys.stderr, end="")
             return proc.returncode
-        if args.json:
+        if args.json or check_json:
             proc = subprocess.run(
                 cmd, check=False, timeout=args.timeout,
                 capture_output=True, text=True, preexec_fn=_preexec(),
